@@ -62,7 +62,7 @@ export async function fetchUpworkJobs(): Promise<ParsedJob[]> {
   return jobs
 }
 
-function parseJobItem(item: RawJob): ParsedJob | null {
+function parseJobItem(item: any): ParsedJob | null {
   try {
     const title = item.title || 'Untitled Job'
     const description = item.content || ''

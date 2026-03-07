@@ -4,21 +4,20 @@ import GoogleProvider from "next-auth/providers/google"
 import { PrismaAdapter } from "@auth/prisma-adapter"
 import { prisma } from "@/lib/db"
 
-export const { handlers, auth, signIn, signOut } = NextAuth({
+const handler = NextAuth({
   adapter: PrismaAdapter(prisma),
   providers: [
     GithubProvider({
-      clientId: process.env.GITHUB_ID || "",
-      clientSecret: process.env.GITHUB_SECRET || "",
+      clientId: process.env.GITHUB_ID || "demo",
+      clientSecret: process.env.GITHUB_SECRET || "demo",
     }),
     GoogleProvider({
-      clientId: process.env.GOOGLE_ID || "",
-      clientSecret: process.env.GOOGLE_SECRET || "",
+      clientId: process.env.GOOGLE_ID || "demo",
+      clientSecret: process.env.GOOGLE_SECRET || "demo",
     }),
   ],
   callbacks: {
     async session({ session, user }) {
-      // Add user ID to session
       if (session.user) {
         (session.user as { id: string }).id = user.id
       }
@@ -29,3 +28,5 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
     signIn: '/auth/signin',
   },
 })
+
+export { handler as GET, handler as POST }

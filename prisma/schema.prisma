@@ -7,7 +7,7 @@ generator client {
 
 datasource db {
   provider = "sqlite"
-  url      = env("DATABASE_URL")
+  url      = "file:./dev.db"
 }
 
 model User {
@@ -78,6 +78,7 @@ model Job {
   tier           String   @default("normal") // priority, alert, normal
   status         String   @default("new") // new, draft, applied, archived
   postedAt       DateTime?
+  url            String?
   fetchedAt      DateTime @default(now())
   brief          String?  // AI-generated brief
   loom           Boolean  @default(false)

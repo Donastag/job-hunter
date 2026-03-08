@@ -1,7 +1,6 @@
 import { NextResponse } from 'next/server'
 import { prisma } from '@/lib/db'
-import { generateSampleJobs } from '@/lib/platforms/upwork'
-import { calculateScore, generateBrief } from '@/lib/scoring'
+import { UpworkIntegration } from '@/lib/platforms/upwork'
 
 export async function POST() {
   try {
@@ -73,6 +72,76 @@ export async function POST() {
     console.error('Error during polling:', error)
     return NextResponse.json({ error: 'Polling failed' }, { status: 500 })
   }
+}
+
+// Helper function to generate sample jobs for testing
+function generateSampleJobs() {
+  const now = new Date()
+  return [
+    {
+      platform: 'upwork',
+      externalId: 'job-001',
+      title: 'React Developer Needed for E-commerce Site',
+      description: 'Looking for a React developer to build a modern e-commerce website with product catalog, shopping cart, and checkout flow.',
+      budget: '$5000',
+      type: 'fixed',
+      skills: ['React', 'JavaScript', 'CSS', 'REST API'],
+      clientName: 'Tech Startup Inc',
+      clientRating: 4.8,
+      clientSpent: '$15,000',
+      clientHired: 12,
+      clientVerified: true,
+      proposals: 25,
+      score: 85,
+      tier: 'priority',
+      status: 'new',
+      postedAt: new Date(now.getTime() - 2 * 60 * 60 * 1000), // 2 hours ago
+      brief: 'Build a responsive React e-commerce site',
+      loom: false,
+    },
+    {
+      platform: 'upwork',
+      externalId: 'job-002',
+      title: 'Node.js Backend Developer for API Development',
+      description: 'Need experienced Node.js developer to create RESTful APIs for mobile application backend.',
+      budget: '$3000',
+      type: 'fixed',
+      skills: ['Node.js', 'Express', 'MongoDB', 'REST API'],
+      clientName: 'Mobile App Company',
+      clientRating: 4.5,
+      clientSpent: '$8,000',
+      clientHired: 8,
+      clientVerified: true,
+      proposals: 18,
+      score: 75,
+      tier: 'normal',
+      status: 'new',
+      postedAt: new Date(now.getTime() - 6 * 60 * 60 * 1000), // 6 hours ago
+      brief: 'Develop scalable Node.js APIs',
+      loom: true,
+    },
+    {
+      platform: 'upwork',
+      externalId: 'job-003',
+      title: 'Full Stack Developer for SaaS Platform',
+      description: 'Seeking full stack developer to help build a SaaS platform using modern technologies.',
+      budget: '$8000',
+      type: 'fixed',
+      skills: ['React', 'Node.js', 'PostgreSQL', 'AWS'],
+      clientName: 'SaaS Startup',
+      clientRating: 4.9,
+      clientSpent: '$25,000',
+      clientHired: 15,
+      clientVerified: true,
+      proposals: 32,
+      score: 92,
+      tier: 'alert',
+      status: 'new',
+      postedAt: new Date(now.getTime() - 1 * 60 * 60 * 1000), // 1 hour ago
+      brief: 'Build complete SaaS platform',
+      loom: false,
+    }
+  ]
 }
 
 // GET endpoint to trigger polling manually

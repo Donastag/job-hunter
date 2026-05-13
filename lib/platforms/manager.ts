@@ -1,207 +1,141 @@
-import { UpworkIntegration, type UpworkJob } from './upwork'
-import { LinkedInIntegration, type LinkedInJob } from './linkedin'
+// Upwork: disabled — RSS killed (410), scraping blocked by Cloudflare.
+// Re-enable via Apify actor (upwork-scraper) once VPS is up.
+import { RemoteOKIntegration, type RemoteOKJob } from './remoteok'
+import { RemotiveIntegration, type RemotiveJob } from './remotive'
+import { WeWorkRemotelyIntegration, type WWRJob } from './weworkremotely'
 import { prisma } from '../db'
-import { Job } from '@prisma/client'
+import { calculateScore } from '../scoring'
 
-interface PlatformJob {
+export type Platform = 'upwork' | 'remoteok' | 'remotive' | 'weworkremotely'
+
+export interface PlatformJob {
   id: string
   title: string
   description: string
   budget?: string
+  type?: string
   skills?: string[]
   clientName?: string
   clientRating?: number
   clientSpent?: string
+  clientHired?: number
+  clientVerified?: boolean
   company?: string
   location?: string
-  type?: string
   postedAt: Date
   url: string
   proposals?: number
-  applicants?: number
-  platform: 'upwork' | 'linkedin'
+  platform: Platform
 }
 
-class PlatformManager {
-  private upwork: UpworkIntegration
-  private linkedin: LinkedInIntegration
+function fromRemoteOK(job: RemoteOKJob): PlatformJob {
+  return { ...job, platform: 'remoteok' }
+}
 
-  constructor() {
-    this.upwork = new UpworkIntegration()
-    this.linkedin = new LinkedInIntegration()
-  }
+function fromRemotive(job: RemotiveJob): PlatformJob {
+  return { ...job, platform: 'remotive' }
+}
 
-  async fetchJobsFromAllPlatforms(searchTerms: string): Promise<PlatformJob[]> {
-    const allJobs: PlatformJob[] = []
-    
-    try {
-      // Fetch from Upwork
-      if (process.env.UPWORK_RSS_URL) {
-        const upworkJobs = await this.upwork.fetchJobs()
-        const platformJobs = upworkJobs.map(job => ({
-          ...job,
-          platform: 'upwork' as const
-        }))
-        allJobs.push(...platformJobs)
-      }
-    } catch (error) {
-      console.error('Error fetching Upwork jobs:', error)
+function fromWWR(job: WWRJob): PlatformJob {
+  return { ...job, platform: 'weworkremotely' }
+}
+
+export class PlatformManager {
+  private remoteok = new RemoteOKIntegration()
+  private remotive = new RemotiveIntegration()
+  private wwr = new WeWorkRemotelyIntegration()
+
+  async fetchAll(): Promise<PlatformJob[]> {
+    const [remoteokJobs, remotiveJobs, wwrJobs] = await Promise.allSettled([
+      this.remoteok.fetchJobs(),
+      this.remotive.fetchJobs(),
+      this.wwr.fetchJobs(),
+    ])
+
+    const all: PlatformJob[] = []
+
+    if (remoteokJobs.status === 'fulfilled') {
+      all.push(...remoteokJobs.value.map(fromRemoteOK))
+      console.log(`[Manager] RemoteOK: ${remoteokJobs.value.length} jobs`)
+    } else {
+      console.error('[Manager] RemoteOK failed:', remoteokJobs.reason)
     }
 
-    try {
-      // Fetch from LinkedIn
-      if (process.env.LINKEDIN_API_KEY && process.env.LINKEDIN_API_SECRET) {
-        const linkedinJobs = await this.linkedin.fetchJobs(searchTerms)
-        const platformJobs = linkedinJobs.map(job => ({
-          ...job,
-          platform: 'linkedin' as const
-        }))
-        allJobs.push(...platformJobs)
-      }
-    } catch (error) {
-      console.error('Error fetching LinkedIn jobs:', error)
+    if (remotiveJobs.status === 'fulfilled') {
+      all.push(...remotiveJobs.value.map(fromRemotive))
+      console.log(`[Manager] Remotive: ${remotiveJobs.value.length} jobs`)
+    } else {
+      console.error('[Manager] Remotive failed:', remotiveJobs.reason)
     }
 
-    return allJobs
+    if (wwrJobs.status === 'fulfilled') {
+      all.push(...wwrJobs.value.map(fromWWR))
+      console.log(`[Manager] WeWorkRemotely: ${wwrJobs.value.length} jobs`)
+    } else {
+      console.error('[Manager] WeWorkRemotely failed:', wwrJobs.reason)
+    }
+
+    return all
   }
 
-  async syncJobsToDatabase(searchTerms: string): Promise<number> {
-    const jobs = await this.fetchJobsFromAllPlatforms(searchTerms)
-    let syncedCount = 0
+  async syncToDatabase(): Promise<{ newJobs: number; priorityJobs: PlatformJob[] }> {
+    const jobs = await this.fetchAll()
+    let newCount = 0
+    const priorityJobs: PlatformJob[] = []
 
     for (const job of jobs) {
       try {
-        // Check if job already exists
-        const existingJob = await prisma.job.findFirst({
-          where: {
-            externalId: job.id,
-            OR: [
-              { platform: 'upwork' },
-              { platform: 'linkedin' }
-            ]
-          }
+        const existing = await prisma.job.findFirst({
+          where: { externalId: job.id },
+        })
+        if (existing) continue
+
+        const { score, tier } = calculateScore({
+          title: job.title,
+          description: job.description,
+          budget: job.budget || '$0',
+          type: job.type,
+          skills: job.skills || [],
+          clientRating: job.clientRating,
+          clientSpent: job.clientSpent,
+          clientHired: job.clientHired,
+          proposals: job.proposals,
+          postedAt: job.postedAt,
         })
 
-        if (!existingJob) {
-          // Create new job
-          await prisma.job.create({
-            data: {
-              platform: job.platform === 'upwork' ? 'upwork' : 'linkedin',
-              externalId: job.id,
-              title: job.title,
-              description: job.description,
-              budget: job.budget || undefined,
-              type: job.type || undefined,
-              skills: JSON.stringify(job.skills || []),
-              clientName: job.clientName || undefined,
-              clientRating: job.clientRating || undefined,
-              clientSpent: job.clientSpent || undefined,
-              proposals: job.proposals || 0,
-              postedAt: job.postedAt,
-              url: job.url
-            }
-          })
-          syncedCount++
+        await prisma.job.create({
+          data: {
+            platform: job.platform,
+            externalId: job.id,
+            title: job.title,
+            description: job.description.slice(0, 5000),
+            budget: job.budget,
+            type: job.type,
+            skills: JSON.stringify(job.skills || []),
+            clientName: job.company,
+            clientRating: job.clientRating,
+            clientSpent: job.clientSpent,
+            clientHired: job.clientHired,
+            clientVerified: job.clientVerified || false,
+            proposals: job.proposals || 0,
+            score,
+            tier,
+            status: 'new',
+            postedAt: job.postedAt,
+            url: job.url,
+          },
+        })
+
+        newCount++
+        if (tier === 'priority' || tier === 'alert') {
+          priorityJobs.push({ ...job })
         }
-      } catch (error) {
-        console.error('Error syncing job to database:', error)
+      } catch (err) {
+        console.error(`[Manager] Failed to save job "${job.title}":`, (err as Error).message)
       }
     }
 
-    return syncedCount
-  }
-
-  async getJobDetails(platform: string, jobId: string): Promise<PlatformJob | null> {
-    try {
-      if (platform === 'upwork') {
-        const job = await this.upwork.getJobDetails(jobId)
-        return job ? { ...job, platform: 'upwork' } : null
-      } else if (platform === 'linkedin') {
-        const job = await this.linkedin.getJobDetails(jobId)
-        return job ? { ...job, platform: 'linkedin' } : null
-      }
-      return null
-    } catch (error) {
-      console.error('Error fetching job details:', error)
-      return null
-    }
-  }
-
-  async searchJobs(searchTerms: string, filters?: {
-    platform?: string[]
-    type?: string[]
-    minBudget?: number
-    maxBudget?: number
-  }): Promise<PlatformJob[]> {
-    const jobs = await this.fetchJobsFromAllPlatforms(searchTerms)
-    
-    return jobs.filter(job => {
-      // Apply platform filter
-      if (filters?.platform && !filters.platform.includes(job.platform)) {
-        return false
-      }
-
-      // Apply type filter
-      if (filters?.type && !filters.type.includes(job.type || '')) {
-        return false
-      }
-
-      // Apply budget filters
-      if (filters?.minBudget || filters?.maxBudget) {
-        const budget = this.parseBudget(job.budget || '')
-        if (filters.minBudget && budget < filters.minBudget) {
-          return false
-        }
-        if (filters.maxBudget && budget > filters.maxBudget) {
-          return false
-        }
-      }
-
-      return true
-    })
-  }
-
-  private parseBudget(budgetStr: string): number {
-    const match = budgetStr.match(/\$?([\d,]+(?:\.\d{2})?)/)
-    if (match) {
-      return parseFloat(match[1].replace(',', ''))
-    }
-    return 0
-  }
-
-  async getPlatformStats(): Promise<{
-    upwork: { totalJobs: number; lastSync: Date | null }
-    linkedin: { totalJobs: number; lastSync: Date | null }
-  }> {
-    const upworkJobs = await prisma.job.count({
-      where: { platform: 'upwork' }
-    })
-    
-    const linkedinJobs = await prisma.job.count({
-      where: { platform: 'linkedin' }
-    })
-
-    const upworkLastSync = await prisma.job.findFirst({
-      where: { platform: 'upwork' },
-      orderBy: { fetchedAt: 'desc' }
-    })
-
-    const linkedinLastSync = await prisma.job.findFirst({
-      where: { platform: 'linkedin' },
-      orderBy: { fetchedAt: 'desc' }
-    })
-
-    return {
-      upwork: {
-        totalJobs: upworkJobs,
-        lastSync: upworkLastSync?.fetchedAt || null
-      },
-      linkedin: {
-        totalJobs: linkedinJobs,
-        lastSync: linkedinLastSync?.fetchedAt || null
-      }
-    }
+    console.log(`[Manager] Sync done — ${newCount} new jobs, ${priorityJobs.length} priority/alert`)
+    return { newJobs: newCount, priorityJobs }
   }
 }
-
-export { PlatformManager, type PlatformJob }

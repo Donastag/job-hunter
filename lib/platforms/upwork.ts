@@ -1,103 +1,145 @@
 import RSSParser from 'rss-parser'
 
-interface UpworkJob {
+export interface UpworkJob {
   id: string
   title: string
   description: string
-  budget: string
-  skills: string[]
-  clientName: string
-  clientRating: number
-  clientSpent: string
-  proposals: number
+  budget?: string
+  type?: string
+  skills?: string[]
+  location?: string
+  clientRating?: number
+  clientSpent?: string
+  clientHired?: number
+  clientVerified?: boolean
+  proposals?: number
   postedAt: Date
   url: string
 }
 
-class UpworkIntegration {
-  private parser: RSSParser
-  private rssUrl: string
-
-  constructor() {
-    this.parser = new RSSParser()
-    this.rssUrl = process.env.UPWORK_RSS_URL || ''
-  }
-
-  async fetchJobs(): Promise<UpworkJob[]> {
-    if (!this.rssUrl) {
-      throw new Error('UPWORK_RSS_URL not configured')
-    }
-
-    try {
-      const feed = await this.parser.parseURL(this.rssUrl)
-      const jobs: UpworkJob[] = []
-
-      for (const item of feed.items) {
-        if (!item.link || !item.title) continue
-
-        const job = this.parseJobItem(item)
-        if (job) {
-          jobs.push(job)
-        }
-      }
-
-      return jobs
-    } catch (error) {
-      console.error('Error fetching Upwork jobs:', error)
-      throw new Error('Failed to fetch Upwork jobs')
-    }
-  }
-
-  private parseJobItem(item: any): UpworkJob | null {
-    try {
-      // Extract budget from description or title
-      const budgetMatch = item.description?.match(/\$[\d,]+(?:\.\d{2})?/)
-      const budget = budgetMatch ? budgetMatch[0] : 'Not specified'
-
-      // Extract skills from description
-      const skillsMatch = item.description?.match(/Skills:\s*([^\n]+)/i)
-      const skills = skillsMatch 
-        ? skillsMatch[1].split(',').map((s: string) => s.trim())
-        : []
-
-      // Extract client info
-      const clientMatch = item.description?.match(/Client:\s*([^\n]+)/i)
-      const clientName = clientMatch ? clientMatch[1].trim() : 'Not specified'
-
-      // Extract proposals
-      const proposalsMatch = item.description?.match(/(\d+)\s+proposals?/i)
-      const proposals = proposalsMatch ? parseInt(proposalsMatch[1]) : 0
-
-      return {
-        id: item.guid || item.link,
-        title: item.title,
-        description: item.description || '',
-        budget,
-        skills,
-        clientName,
-        clientRating: 0, // Upwork RSS doesn't include rating
-        clientSpent: 'Not specified',
-        proposals,
-        postedAt: new Date(item.pubDate || Date.now()),
-        url: item.link
-      }
-    } catch (error) {
-      console.error('Error parsing Upwork job item:', error)
-      return null
-    }
-  }
-
-  async getJobDetails(jobId: string): Promise<UpworkJob | null> {
-    // For RSS-based integration, we return the job from the feed
-    // In a full API integration, this would fetch detailed job info
-    const jobs = await this.fetchJobs()
-    return jobs.find(job => job.id === jobId) || null
-  }
-
-  static getSearchUrl(searchTerms: string): string {
-    const encodedTerms = encodeURIComponent(searchTerms)
-    return `https://www.upwork.com/ab/feed/jobs/rss?q=${encodedTerms}`
-  }
+type CustomItem = {
+  budget?: string
+  jobType?: string
+  skills?: string
+  country?: string
+  clientRating?: string
+  clientSpent?: string
+  clientHired?: string
+  clientVerified?: string
+  proposals?: string
 }
 
-export { UpworkIntegration, type UpworkJob }
+export class UpworkIntegration {
+  private parser: RSSParser<Record<string, unknown>, CustomItem>
+
+  constructor() {
+    this.parser = new RSSParser<Record<string, unknown>, CustomItem>({
+      customFields: {
+        item: [
+          ['upwork:budget', 'budget'],
+          ['upwork:job_type', 'jobType'],
+          ['upwork:skills', 'skills'],
+          ['upwork:country', 'country'],
+          ['upwork:client_rating', 'clientRating'],
+          ['upwork:client_total_charge', 'clientSpent'],
+          ['upwork:client_hires', 'clientHired'],
+          ['upwork:client_payment_verification_status', 'clientVerified'],
+          ['upwork:job_proposals', 'proposals'],
+        ],
+      },
+      timeout: 20000,
+      headers: { 'User-Agent': 'Mozilla/5.0 JobHunter/1.0' },
+    })
+  }
+
+  // Run scripts/extract-upwork-rss.mjs once to populate UPWORK_RSS_URL + UPWORK_COOKIES in .env.local
+  async fetchJobs(): Promise<UpworkJob[]> {
+    const cookies = process.env.UPWORK_COOKIES
+    const rssUrlsRaw = process.env.UPWORK_RSS_URLS || process.env.UPWORK_RSS_URL
+
+    if (!cookies || !rssUrlsRaw) {
+      console.warn('[Upwork] Not configured — run: node scripts/extract-upwork-rss.mjs')
+      return []
+    }
+
+    const urls = rssUrlsRaw.split(',').map(u => u.trim()).filter(Boolean)
+    const seen = new Set<string>()
+    const all: UpworkJob[] = []
+
+    for (const rssUrl of urls) {
+      try {
+        // Use fetch with session cookies, then parse the XML string
+        const res = await fetch(rssUrl, {
+          headers: {
+            'Cookie': cookies,
+            'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 Chrome/124.0.0.0 Safari/537.36',
+            'Accept': 'application/rss+xml, application/xml, text/xml, */*',
+          },
+          signal: AbortSignal.timeout(20000),
+        })
+
+        if (!res.ok) {
+          console.error(`[Upwork] RSS returned ${res.status} — cookies may have expired. Re-run extract-upwork-rss.mjs`)
+          continue
+        }
+
+        const xml = await res.text()
+        const feed = await this.parser.parseString(xml)
+
+        for (const item of feed.items) {
+          const id = (item.guid as string) || item.link || ''
+          if (!id || seen.has(id)) continue
+          seen.add(id)
+          const job = this.mapItem(item as RSSParser.Item & CustomItem)
+          if (job) all.push(job)
+        }
+      } catch (err) {
+        console.error(`[Upwork] fetch failed for ${rssUrl}:`, (err as Error).message)
+      }
+    }
+
+    return all
+  }
+
+  private mapItem(item: RSSParser.Item & CustomItem): UpworkJob | null {
+    if (!item.title || !item.link) return null
+
+    const desc = (item.content || item.contentSnippet || '')
+      .replace(/<[^>]+>/g, '')
+      .replace(/\s+/g, ' ')
+      .trim()
+
+    const skills = (item.skills || '')
+      .split(',')
+      .map((s: string) => s.trim())
+      .filter(Boolean)
+
+    const budget = item.budget || this.extractBudgetFromDesc(desc)
+
+    return {
+      id: (item.guid as string) || item.link!,
+      title: item.title.trim(),
+      description: desc,
+      budget,
+      type: item.jobType === 'Hourly' ? 'Hourly' : 'Fixed',
+      skills,
+      location: item.country || 'Remote',
+      clientRating: item.clientRating ? parseFloat(item.clientRating) : undefined,
+      clientSpent: item.clientSpent,
+      clientHired: item.clientHired ? parseInt(item.clientHired, 10) : undefined,
+      clientVerified: item.clientVerified?.toLowerCase() === 'verified',
+      proposals: item.proposals ? parseInt(item.proposals, 10) : 0,
+      postedAt: item.pubDate ? new Date(item.pubDate) : new Date(),
+      url: item.link!,
+    }
+  }
+
+  private extractBudgetFromDesc(desc: string): string {
+    const m = desc.match(/\$[\d,]+(?:\s*[-–]\s*\$[\d,]+)?(?:\/hr)?/)
+    return m ? m[0] : '$0'
+  }
+
+  async getJobDetails(_jobId: string) {
+    return null
+  }
+}

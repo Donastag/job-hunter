@@ -1,0 +1,270 @@
+<%- include('partials/head', { title: 'Pipeline' }) %>
+<%- include('partials/nav') %>
+
+<!-- ── Stats Bar ───────────────────────────────────────────────── -->
+<div style="background:var(--surface);border-bottom:1px solid var(--border);" class="flex items-stretch overflow-x-auto">
+  <% const convRate = totalLeads > 0 ? Math.round((staged.won.length / totalLeads) * 100) : 0 %>
+  <% [
+    { k:'TOTAL LEADS',  v: totalLeads,                c:'var(--text)',  sub:'across all stages' },
+    { k:'PIPELINE',     v:'$'+totalValue.toLocaleString(), c:'var(--green)', sub:'weighted value', mono:true },
+    { k:'WON',          v:'$'+wonValue.toLocaleString(),   c:'var(--green)', sub: staged.won.length+' contracts', mono:true },
+    { k:'CONV. RATE',   v: convRate+'%',              c: convRate > 20 ? 'var(--green)' : 'var(--amber)', sub:'contacted → won', mono:true },
+  ].forEach(s => { %>
+  <div class="px-7 py-4 flex-shrink-0" style="border-right:1px solid var(--border);min-width:148px;">
+    <div class="<%= s.mono ? 'mono' : '' %> text-2xl font-bold tracking-tight" style="color:<%= s.c %>"><%= s.v %></div>
+    <div class="text-xs mt-0.5 tracking-widest" style="color:var(--text-3);"><%= s.k %></div>
+    <div style="font-size:10px;color:var(--text-4);margin-top:2px;"><%= s.sub %></div>
+  </div>
+  <% }) %>
+
+  <!-- Add Lead button -->
+  <div class="px-6 py-4 ml-auto flex items-center flex-shrink-0">
+    <button onclick="openModal()" class="btn btn-primary" style="padding:8px 18px;font-size:12px;font-weight:700;gap:6px;">
+      <svg width="11" height="11" viewBox="0 0 11 11" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+        <path d="M5.5 1v9M1 5.5h9"/>
+      </svg>
+      ADD LEAD
+    </button>
+  </div>
+</div>
+
+<!-- ── Kanban Board ─────────────────────────────────────────────── -->
+<div style="height:calc(100vh - 120px);overflow-x:auto;overflow-y:hidden;padding:20px 24px;display:flex;gap:10px;">
+  <%
+    const KOL = [
+      { id:'contacted',  label:'CONTACTED',  color:'#3B82F6', border:'rgba(59,130,246,.35)', bg:'rgba(59,130,246,.06)' },
+      { id:'engaged',    label:'ENGAGED',    color:'#8B5CF6', border:'rgba(139,92,246,.35)',bg:'rgba(139,92,246,.06)' },
+      { id:'call_booked',label:'CALL BOOKED',color:'#F59E0B', border:'rgba(245,158,11,.35)',bg:'rgba(245,158,11,.06)' },
+      { id:'negotiating',label:'NEGOTIATING',color:'#F97316', border:'rgba(249,115,22,.35)',bg:'rgba(249,115,22,.06)' },
+      { id:'won',        label:'WON',        color:'#10B981', border:'rgba(16,185,129,.35)', bg:'rgba(16,185,129,.06)' },
+    ]
+  %>
+  <% KOL.forEach(kol => {
+    const leads = staged[kol.id] || []
+    const colVal = leads.reduce((s,l) => s + (l.value||0), 0)
+  %>
+  <div style="flex:0 0 210px;display:flex;flex-direction:column;height:100%;">
+
+    <!-- Column header -->
+    <div class="rounded-t-lg px-3 py-2.5 mb-0"
+         style="background:<%= kol.bg %>;border:1px solid <%= kol.border %>;border-bottom:none;">
+      <div class="flex items-center justify-between">
+        <span class="text-xs font-bold tracking-widest" style="color:<%= kol.color %>"><%= kol.label %></span>
+        <div class="flex items-center gap-2">
+          <span class="mono text-xs font-medium" style="color:<%= kol.color %>80;font-size:10px;">
+            $<%= colVal.toLocaleString() %>
+          </span>
+          <span class="mono w-5 h-5 rounded-full flex items-center justify-center text-xs font-bold flex-shrink-0"
+                style="background:<%= kol.color %>20;color:<%= kol.color %>;font-size:11px;">
+            <%= leads.length %>
+          </span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Cards area -->
+    <div style="
+      flex:1; overflow-y:auto; display:flex; flex-direction:column; gap:7px;
+      background:var(--surface-2); border:1px solid <%= kol.border %>;
+      border-top:none; border-radius:0 0 var(--r-lg) var(--r-lg); padding:10px;
+    ">
+      <% if (leads.length === 0) { %>
+      <div class="flex items-center justify-center flex-1 rounded-lg"
+           style="border:1px dashed var(--border);color:var(--text-4);font-size:11px;letter-spacing:.06em;min-height:64px;">
+        EMPTY
+      </div>
+      <% } %>
+      <% leads.forEach(lead => {
+        const days = parseInt(lead.ageLabel)
+        const ageColor = isNaN(days) ? 'var(--green)' : days <= 2 ? 'var(--green)' : days <= 7 ? 'var(--amber)' : 'var(--red)'
+      %>
+      <div class="lead-card" id="card-<%= lead.id %>" style="border-left-color:<%= kol.color %>;">
+        <!-- Name + company -->
+        <div class="font-semibold leading-tight" style="font-size:13px;color:var(--text);margin-bottom:2px;"><%= lead.name %></div>
+        <% if (lead.company) { %>
+        <div style="font-size:11px;color:var(--text-3);margin-bottom:8px;"><%= lead.company %></div>
+        <% } else { %>
+        <div style="margin-bottom:8px;"></div>
+        <% } %>
+
+        <!-- Value + age row -->
+        <div class="flex items-center justify-between mb-2.5">
+          <span class="mono font-bold" style="font-size:13px;color:<%= kol.color %>;">
+            $<%= (lead.value||0).toLocaleString() %>
+          </span>
+          <span class="mono text-xs" style="color:<%= ageColor %>;">
+            <%= lead.ageLabel %>
+          </span>
+        </div>
+
+        <!-- Source pill -->
+        <div class="mb-3">
+          <span class="platform-tag"><%= lead.source %></span>
+        </div>
+
+        <!-- Move select -->
+        <select onchange="moveLead('<%= lead.id %>',this.value)"
+          style="
+            width:100%; padding:5px 9px; border-radius:var(--r);
+            background:var(--surface); border:1px solid var(--border);
+            color:var(--text-3); font-size:11px; font-family:inherit;
+            outline:none; cursor:pointer;
+            transition:border-color 150ms ease;
+          "
+          onmouseover="this.style.borderColor='var(--border)'"
+          onfocus="this.style.borderColor='<%= kol.color %>60'">
+          <option value="">— move to —</option>
+          <% KOL.forEach(k => { %>
+            <% if (k.id !== kol.id) { %>
+            <option value="<%= k.id %>"><%= k.label %></option>
+            <% } %>
+          <% }) %>
+        </select>
+      </div>
+      <% }) %>
+    </div>
+  </div>
+  <% }) %>
+</div>
+
+<!-- ── Add Lead Modal ──────────────────────────────────────────── -->
+<div id="modal-backdrop" class="modal-backdrop" onclick="handleBackdropClick(event)">
+  <div class="modal-box" onclick="event.stopPropagation()">
+    <div class="flex items-center justify-between mb-6">
+      <div>
+        <div class="text-sm font-bold tracking-widest" style="color:var(--text);">ADD LEAD</div>
+        <div style="font-size:11px;color:var(--text-3);margin-top:2px;">Add a new contact to the pipeline</div>
+      </div>
+      <button onclick="closeModal()"
+        style="width:28px;height:28px;border-radius:var(--r);background:var(--surface-2);border:1px solid var(--border);
+               color:var(--text-3);cursor:pointer;display:flex;align-items:center;justify-content:center;font-size:16px;line-height:1;
+               transition:all 150ms ease;"
+        onmouseover="this.style.borderColor='var(--border)';this.style.color='var(--text-2)'"
+        onmouseout="this.style.borderColor='var(--border)';this.style.color='var(--text-3)'">×</button>
+    </div>
+
+    <form id="lead-form" onsubmit="submitLead(event)" style="display:flex;flex-direction:column;gap:16px;">
+
+      <div>
+        <label class="lbl">NAME *</label>
+        <input name="name" required placeholder="e.g. Jane Smith" class="field">
+      </div>
+
+      <div>
+        <label class="lbl">COMPANY</label>
+        <input name="company" placeholder="e.g. Acme Inc." class="field">
+      </div>
+
+      <div style="display:flex;gap:12px;">
+        <div style="flex:1;">
+          <label class="lbl">SOURCE</label>
+          <select name="source" class="field" style="cursor:pointer;">
+            <option value="upwork">Upwork</option>
+            <option value="linkedin">LinkedIn</option>
+            <option value="contra">Contra</option>
+            <option value="direct">Direct</option>
+            <option value="manual" selected>Manual</option>
+          </select>
+        </div>
+        <div style="flex:1;">
+          <label class="lbl">VALUE ($)</label>
+          <input name="value" type="number" min="0" step="100" placeholder="0" class="field">
+        </div>
+      </div>
+
+      <div>
+        <label class="lbl">INITIAL STAGE</label>
+        <select name="stage" class="field" style="cursor:pointer;">
+          <option value="contacted" selected>Contacted</option>
+          <option value="engaged">Engaged</option>
+          <option value="call_booked">Call Booked</option>
+          <option value="negotiating">Negotiating</option>
+          <option value="won">Won</option>
+        </select>
+      </div>
+
+      <div>
+        <label class="lbl">NOTES</label>
+        <textarea name="notes" rows="2" placeholder="Context, requirements, next steps…"
+          class="field" style="resize:none;"></textarea>
+      </div>
+
+      <!-- Divider -->
+      <div style="height:1px;background:var(--border);margin:0 -4px;"></div>
+
+      <button type="submit" id="submit-btn" class="btn btn-primary"
+        style="width:100%;justify-content:center;padding:10px;font-size:13px;font-weight:700;">
+        ADD LEAD
+      </button>
+    </form>
+  </div>
+</div>
+
+<!-- ── Toast ──────────────────────────────────────────────────── -->
+<div id="toast" style="z-index:200;"><span id="toast-msg"></span></div>
+
+<script>
+function toast(msg, type) {
+  const el = document.getElementById('toast')
+  document.getElementById('toast-msg').textContent = msg
+  el.className = type === 'success' ? 't-ok' : type === 'error' ? 't-err' : ''
+  el.classList.add('show')
+  clearTimeout(el._t)
+  el._t = setTimeout(() => el.classList.remove('show'), 3000)
+}
+
+function openModal() {
+  document.getElementById('modal-backdrop').classList.add('open')
+}
+function closeModal() {
+  document.getElementById('modal-backdrop').classList.remove('open')
+  document.getElementById('lead-form').reset()
+}
+function handleBackdropClick(e) {
+  if (e.target === document.getElementById('modal-backdrop')) closeModal()
+}
+
+async function moveLead(id, stage) {
+  if (!stage) return
+  try {
+    const r = await fetch('/api/leads/' + id + '/stage', {
+      method: 'PUT', headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({ stage })
+    })
+    const d = await r.json()
+    if (d.ok) {
+      toast('Moved to ' + stage.replace('_', ' '), 'success')
+      setTimeout(() => location.reload(), 700)
+    } else { toast(d.error || 'Move failed', 'error') }
+  } catch { toast('Network error', 'error') }
+}
+
+async function submitLead(e) {
+  e.preventDefault()
+  const btn = document.getElementById('submit-btn')
+  btn.disabled = true; btn.textContent = 'SAVING…'
+  const body = Object.fromEntries(new FormData(e.target).entries())
+  try {
+    const r = await fetch('/api/leads', {
+      method: 'POST', headers: {'Content-Type':'application/json'},
+      body: JSON.stringify(body)
+    })
+    const d = await r.json()
+    if (d.ok) {
+      closeModal(); toast('Lead added', 'success')
+      setTimeout(() => location.reload(), 800)
+    } else {
+      toast(d.error || 'Failed', 'error')
+      btn.disabled = false; btn.textContent = 'ADD LEAD'
+    }
+  } catch {
+    toast('Network error', 'error')
+    btn.disabled = false; btn.textContent = 'ADD LEAD'
+  }
+}
+
+// Keyboard shortcut: Escape closes modal
+document.addEventListener('keydown', e => { if (e.key === 'Escape') closeModal() })
+</script>
+</body>
+</html>

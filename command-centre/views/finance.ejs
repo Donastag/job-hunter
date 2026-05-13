@@ -1,0 +1,245 @@
+<%- include('partials/head', { title: 'Finance' }) %>
+<%- include('partials/nav') %>
+
+<!-- ── Stats Bar ───────────────────────────────────────────────── -->
+<div style="background:var(--surface);border-bottom:1px solid var(--border);" class="flex overflow-x-auto">
+  <% [
+    { k: 'TOTAL EARNED',    v: 'KES ' + fmtKES(stats.totalEarned),    c: 'var(--green)',  sub: 'all paid invoices' },
+    { k: 'THIS MONTH',      v: 'KES ' + fmtKES(stats.thisMonth),       c: 'var(--green)',  sub: new Date().toLocaleString('en', {month:'long'}) },
+    { k: 'PENDING',         v: 'KES ' + fmtKES(stats.totalPending),    c: 'var(--amber)',  sub: 'sent, awaiting payment' },
+    { k: 'OVERDUE',         v: 'KES ' + fmtKES(stats.totalOverdue),    c: 'var(--red)',    sub: 'needs follow-up' },
+    { k: 'AVG DEAL',        v: 'KES ' + fmtKES(stats.avgDeal),         c: 'var(--text-2)', sub: 'per paid invoice' },
+  ].forEach(s => { %>
+  <div class="px-7 py-4 flex-shrink-0" style="border-right:1px solid var(--border);min-width:160px;">
+    <div class="mono text-lg font-bold tracking-tight leading-tight" style="color:<%= s.c %>"><%= s.v %></div>
+    <div class="text-xs mt-0.5 tracking-widest" style="color:var(--text-3);"><%= s.k %></div>
+    <div class="text-xs mt-0.5" style="color:var(--text-4);font-size:10px;"><%= s.sub %></div>
+  </div>
+  <% }) %>
+  <div class="px-7 py-4 flex-shrink-0 ml-auto flex flex-col justify-center" style="border-left:1px solid var(--border);">
+    <div class="mono text-2xl font-bold" style="color:var(--text);"><%= stats.count %></div>
+    <div class="text-xs tracking-widest mt-0.5" style="color:var(--text-3);">TOTAL INVOICES</div>
+  </div>
+</div>
+
+<!-- ── Controls Bar ───────────────────────────────────────────── -->
+<div class="px-6 py-3 flex items-center gap-2 flex-wrap" style="background:rgba(9,11,15,.8);border-bottom:1px solid var(--border-2);">
+  <span class="text-xs tracking-widest mr-1" style="color:var(--text-4);">FILTER</span>
+  <% ['all','draft','sent','paid','overdue'].forEach(f => { %>
+  <a href="/finance?filter=<%= f %>" class="ftab <%= (locals.filter || 'all') === f ? 'on' : '' %>">
+    <%= f.toUpperCase() %>
+  </a>
+  <% }) %>
+  <button onclick="openModal()" class="btn btn-primary ml-auto" style="padding:7px 18px;font-size:12px;font-weight:700;">
+    + NEW INVOICE
+  </button>
+</div>
+
+<!-- ── Invoice Table ──────────────────────────────────────────── -->
+<div style="height:calc(100vh - 178px);overflow-y:auto;">
+  <% if (invoices.length === 0) { %>
+  <div class="flex flex-col items-center justify-center py-28 gap-4">
+    <div class="w-16 h-16 rounded-full flex items-center justify-center" style="background:var(--surface-2);border:1px solid var(--border);">
+      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="var(--text-3)" stroke-width="1.5">
+        <path d="M9 5H7a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2h-2"/>
+        <rect x="9" y="3" width="6" height="4" rx="1"/>
+      </svg>
+    </div>
+    <div>
+      <div class="text-sm font-semibold text-center" style="color:var(--text-2);">No invoices yet</div>
+      <div class="text-xs text-center mt-1" style="color:var(--text-3);">Click NEW INVOICE to add your first</div>
+    </div>
+    <button onclick="openModal()" class="btn btn-primary" style="padding:8px 20px;font-size:12px;">+ NEW INVOICE</button>
+  </div>
+  <% } else { %>
+  <table class="w-full" style="border-collapse:collapse;">
+    <colgroup>
+      <col style="width:52px">
+      <col>
+      <col style="width:200px">
+      <col style="width:130px">
+      <col style="width:100px">
+      <col style="width:110px">
+      <col style="width:130px">
+    </colgroup>
+    <thead>
+      <tr style="background:var(--surface);border-bottom:1px solid var(--border);position:sticky;top:0;z-index:10;">
+        <th style="padding:10px 8px;text-align:center;font-size:9px;letter-spacing:.12em;color:var(--text-3);font-weight:700;">#</th>
+        <th style="padding:10px 16px;text-align:left;font-size:9px;letter-spacing:.12em;color:var(--text-3);font-weight:700;">CLIENT</th>
+        <th style="padding:10px 16px;text-align:left;font-size:9px;letter-spacing:.12em;color:var(--text-3);font-weight:700;">DESCRIPTION</th>
+        <th style="padding:10px 16px;text-align:right;font-size:9px;letter-spacing:.12em;color:var(--text-3);font-weight:700;">AMOUNT (KES)</th>
+        <th style="padding:10px 16px;text-align:center;font-size:9px;letter-spacing:.12em;color:var(--text-3);font-weight:700;">STATUS</th>
+        <th style="padding:10px 16px;text-align:center;font-size:9px;letter-spacing:.12em;color:var(--text-3);font-weight:700;">DUE</th>
+        <th style="padding:10px 16px;text-align:center;font-size:9px;letter-spacing:.12em;color:var(--text-3);font-weight:700;">ACTIONS</th>
+      </tr>
+    </thead>
+    <tbody>
+      <% invoices.forEach((inv, i) => {
+        const sc = {
+          draft:     { c: 'var(--text-3)',  bg: 'rgba(100,116,139,.08)', border: 'var(--border)' },
+          sent:      { c: 'var(--blue)',    bg: 'var(--blue-dim)',        border: 'var(--blue-ring)' },
+          paid:      { c: 'var(--green)',   bg: 'var(--green-dim)',       border: 'var(--green-ring)' },
+          overdue:   { c: 'var(--red)',     bg: 'var(--red-dim)',         border: 'rgba(239,68,68,.4)' },
+          cancelled: { c: 'var(--text-4)',  bg: 'transparent',            border: 'var(--border-2)' },
+        }[inv.status] || { c: 'var(--text-3)', bg: 'transparent', border: 'var(--border)' }
+      %>
+      <tr style="border-bottom:1px solid var(--border-2);transition:background 120ms;">
+        <td style="padding:12px 8px;text-align:center;font-size:10px;color:var(--text-4);" class="mono"><%= i+1 %></td>
+        <td style="padding:12px 16px;">
+          <div style="font-size:13px;font-weight:600;color:var(--text)"><%= inv.clientName %></div>
+          <% if (inv.clientEmail) { %>
+          <div style="font-size:10px;color:var(--text-3);margin-top:2px"><%= inv.clientEmail %></div>
+          <% } %>
+        </td>
+        <td style="padding:12px 16px;font-size:12px;color:var(--text-2);max-width:200px;">
+          <%= inv.description || '—' %>
+        </td>
+        <td style="padding:12px 16px;text-align:right;" class="mono">
+          <span style="font-size:14px;font-weight:700;color:<%= inv.status === 'paid' ? 'var(--green)' : 'var(--text)' %>">
+            <%= fmtKES(inv.amount) %>
+          </span>
+        </td>
+        <td style="padding:12px 16px;text-align:center;">
+          <span class="pill" style="color:<%= sc.c %>;background:<%= sc.bg %>;border-color:<%= sc.border %>;">
+            <%= inv.status.toUpperCase() %>
+          </span>
+        </td>
+        <td style="padding:12px 16px;text-align:center;font-size:11px;color:var(--text-3);" class="mono">
+          <%= inv.dueDate ? new Date(inv.dueDate).toLocaleDateString('en-KE',{day:'2-digit',month:'short',year:'numeric'}) : '—' %>
+        </td>
+        <td style="padding:12px 16px;text-align:center;">
+          <div style="display:flex;gap:4px;justify-content:center;flex-wrap:wrap;">
+            <% if (inv.status !== 'sent' && inv.status !== 'paid') { %>
+            <button onclick="setStatus('<%= inv.id %>','sent')" class="btn btn-ghost" style="padding:3px 9px;font-size:10px;">SENT</button>
+            <% } %>
+            <% if (inv.status !== 'paid') { %>
+            <button onclick="setStatus('<%= inv.id %>','paid')" class="btn" style="padding:3px 9px;font-size:10px;color:var(--green);border-color:var(--green-ring);background:var(--green-dim);">PAID</button>
+            <% } %>
+            <% if (inv.status !== 'overdue' && inv.status !== 'paid' && inv.status !== 'cancelled') { %>
+            <button onclick="setStatus('<%= inv.id %>','overdue')" class="btn" style="padding:3px 9px;font-size:10px;color:var(--red);border-color:rgba(239,68,68,.4);background:var(--red-dim);">OVERDUE</button>
+            <% } %>
+            <button onclick="deleteInv('<%= inv.id %>')" class="btn btn-ghost" style="padding:3px 9px;font-size:10px;color:var(--text-4);">DEL</button>
+          </div>
+        </td>
+      </tr>
+      <% }) %>
+    </tbody>
+  </table>
+  <% } %>
+</div>
+
+<!-- ── Add Invoice Modal ──────────────────────────────────────── -->
+<div class="modal-backdrop" id="modal">
+  <div class="modal-box" style="width:480px;">
+    <div class="flex items-center justify-between mb-6">
+      <h2 style="font-size:14px;font-weight:700;letter-spacing:.08em;color:var(--text);">NEW INVOICE</h2>
+      <button onclick="closeModal()" style="background:none;border:none;color:var(--text-3);cursor:pointer;font-size:18px;line-height:1;">✕</button>
+    </div>
+    <form id="inv-form">
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:14px;">
+        <div>
+          <label class="lbl">CLIENT NAME *</label>
+          <input id="f-client" class="field" placeholder="e.g. Acme Corp" required>
+        </div>
+        <div>
+          <label class="lbl">CLIENT EMAIL</label>
+          <input id="f-email" type="email" class="field" placeholder="client@email.com">
+        </div>
+      </div>
+      <div style="margin-bottom:14px;">
+        <label class="lbl">DESCRIPTION</label>
+        <input id="f-desc" class="field" placeholder="e.g. Web development — May 2026">
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:14px;margin-bottom:20px;">
+        <div>
+          <label class="lbl">AMOUNT (KES)</label>
+          <input id="f-amount" type="number" min="0" step="0.01" class="field" placeholder="0.00" required>
+        </div>
+        <div>
+          <label class="lbl">STATUS</label>
+          <select id="f-status" class="field" style="cursor:pointer;">
+            <option value="draft">Draft</option>
+            <option value="sent">Sent</option>
+            <option value="paid">Paid</option>
+          </select>
+        </div>
+        <div>
+          <label class="lbl">DUE DATE</label>
+          <input id="f-due" type="date" class="field">
+        </div>
+      </div>
+      <div class="flex gap-3 justify-end">
+        <button type="button" onclick="closeModal()" class="btn btn-ghost">Cancel</button>
+        <button type="submit" class="btn btn-primary" style="padding:8px 20px;">CREATE INVOICE</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<div id="toast"></div>
+
+<script>
+function openModal() { document.getElementById('modal').classList.add('open') }
+function closeModal() { document.getElementById('modal').classList.remove('open') }
+
+document.getElementById('modal').addEventListener('click', e => {
+  if (e.target === document.getElementById('modal')) closeModal()
+})
+
+document.getElementById('inv-form').addEventListener('submit', async e => {
+  e.preventDefault()
+  const btn = e.target.querySelector('[type=submit]')
+  btn.disabled = true; btn.textContent = 'CREATING...'
+
+  try {
+    const r = await fetch('/finance/invoices', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        clientName:  document.getElementById('f-client').value,
+        clientEmail: document.getElementById('f-email').value,
+        description: document.getElementById('f-desc').value,
+        amount:      document.getElementById('f-amount').value,
+        status:      document.getElementById('f-status').value,
+        dueDate:     document.getElementById('f-due').value || null,
+      })
+    })
+    if (!r.ok) throw new Error((await r.json()).error)
+    showToast('Invoice created', 'ok')
+    setTimeout(() => location.reload(), 600)
+  } catch(err) {
+    showToast(err.message, 'err')
+    btn.disabled = false; btn.textContent = 'CREATE INVOICE'
+  }
+})
+
+async function setStatus(id, status) {
+  try {
+    const r = await fetch(`/finance/invoices/${id}/status`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ status })
+    })
+    if (!r.ok) throw new Error((await r.json()).error)
+    showToast('Status updated', 'ok')
+    setTimeout(() => location.reload(), 500)
+  } catch(err) { showToast(err.message, 'err') }
+}
+
+async function deleteInv(id) {
+  if (!confirm('Delete this invoice?')) return
+  try {
+    const r = await fetch(`/finance/invoices/${id}`, { method: 'DELETE' })
+    if (!r.ok) throw new Error((await r.json()).error)
+    showToast('Deleted', 'ok')
+    setTimeout(() => location.reload(), 500)
+  } catch(err) { showToast(err.message, 'err') }
+}
+
+function showToast(msg, type) {
+  const t = document.getElementById('toast')
+  t.textContent = msg
+  t.className = `show t-${type}`
+  setTimeout(() => t.className = '', 2800)
+}
+</script>

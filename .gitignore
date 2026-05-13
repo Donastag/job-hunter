@@ -30,8 +30,20 @@ yarn-debug.log*
 yarn-error.log*
 .pnpm-debug.log*
 
-# env files (can opt-in for committing if needed)
-.env*
+# env files
+.env
+.env.local
+.env.production
+.env.*.local
+# .env.example is committed intentionally
+
+# SQLite database
+prisma/dev.db
+prisma/dev.db-shm
+prisma/dev.db-wal
+
+# command-centre node_modules
+command-centre/node_modules/
 
 # vercel
 .vercel

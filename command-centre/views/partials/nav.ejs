@@ -1,0 +1,60 @@
+<nav style="background:var(--surface);border-bottom:1px solid var(--border);" class="sticky top-0 z-50">
+  <div class="px-6 h-14 flex items-center gap-6">
+
+    <!-- Brand -->
+    <div class="flex items-center gap-2.5 flex-shrink-0">
+      <div class="w-7 h-7 rounded-lg flex items-center justify-center text-xs font-black text-white"
+           style="background:linear-gradient(135deg,#10B981 0%,#06B6D4 100%);">N</div>
+      <span class="text-xs font-bold tracking-[.18em]" style="color:var(--text);">COMMAND CENTRE</span>
+    </div>
+
+    <!-- Divider -->
+    <div class="w-px h-5 flex-shrink-0" style="background:var(--border);"></div>
+
+    <!-- Nav links -->
+    <div class="flex gap-0.5">
+      <a href="/" style="
+        padding: 5px 14px; border-radius: var(--r);
+        font-size: 11px; font-weight: 600; letter-spacing: .08em;
+        text-decoration: none; transition: all 150ms ease;
+        <%= active === 'hunt' ? 'color:var(--green);background:var(--green-dim);border:1px solid var(--green-ring);' : 'color:var(--text-3);border:1px solid transparent;' %>
+      ">HUNT</a>
+      <a href="/pipeline" style="
+        padding: 5px 14px; border-radius: var(--r);
+        font-size: 11px; font-weight: 600; letter-spacing: .08em;
+        text-decoration: none; transition: all 150ms ease;
+        <%= active === 'pipeline' ? 'color:var(--green);background:var(--green-dim);border:1px solid var(--green-ring);' : 'color:var(--text-3);border:1px solid transparent;' %>
+      ">PIPELINE</a>
+      <a href="/clients" style="
+        padding: 5px 14px; border-radius: var(--r);
+        font-size: 11px; font-weight: 600; letter-spacing: .08em;
+        text-decoration: none; transition: all 150ms ease;
+        <%= active === 'clients' ? 'color:var(--green);background:var(--green-dim);border:1px solid var(--green-ring);' : 'color:var(--text-3);border:1px solid transparent;' %>
+      ">CLIENTS</a>
+      <a href="/finance" style="
+        padding: 5px 14px; border-radius: var(--r);
+        font-size: 11px; font-weight: 600; letter-spacing: .08em;
+        text-decoration: none; transition: all 150ms ease;
+        <%= active === 'finance' ? 'color:var(--green);background:var(--green-dim);border:1px solid var(--green-ring);' : 'color:var(--text-3);border:1px solid transparent;' %>
+      ">FINANCE</a>
+    </div>
+
+    <!-- Spacer -->
+    <div class="flex-1"></div>
+
+    <!-- Live indicator + time -->
+    <div class="flex items-center gap-2 flex-shrink-0">
+      <div class="live-dot"></div>
+      <span class="mono text-xs" style="color:var(--text-3); letter-spacing:.04em;" id="nav-clock">—</span>
+    </div>
+  </div>
+</nav>
+<script>
+  (function() {
+    function tick() {
+      const el = document.getElementById('nav-clock')
+      if (el) el.textContent = new Date().toLocaleTimeString('en-US', { hour12: false })
+    }
+    tick(); setInterval(tick, 1000)
+  })()
+</script>

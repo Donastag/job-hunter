@@ -1,0 +1,105 @@
+services:
+
+  # ── Traefik reverse proxy ────────────────────────────────────────────────
+  traefik:
+    image: traefik:v3.1
+    container_name: nexara-traefik
+    restart: unless-stopped
+    command:
+      - --api.dashboard=true
+      - --api.insecure=true          # dashboard on :8080, restrict via firewall
+      - --providers.docker=true
+      - --providers.docker.exposedbydefault=false
+      - --entrypoints.web.address=:80
+      # TLS entrypoint ready for when domain arrives
+      - --entrypoints.websecure.address=:443
+      - --log.level=WARN
+    ports:
+      - "80:80"
+      - "443:443"
+      - "8080:8080"                  # Traefik dashboard (block from public via firewall)
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - traefik-certs:/certs
+    networks:
+      - nexara
+
+  # ── PostgreSQL ───────────────────────────────────────────────────────────
+  postgres:
+    image: postgres:16-alpine
+    container_name: nexara-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB:       ${POSTGRES_DB:-nexara}
+      POSTGRES_USER:     ${POSTGRES_USER:-nexara}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    networks:
+      - nexara
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-nexara}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ── Job Hunter (Next.js) ─────────────────────────────────────────────────
+  job-hunter:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: nexara-job-hunter
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      NODE_ENV:            production
+      DATABASE_URL:        postgresql://${POSTGRES_USER:-nexara}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-nexara}
+      NEXTAUTH_URL:        ${NEXTAUTH_URL}
+      NEXTAUTH_SECRET:     ${NEXTAUTH_SECRET}
+      TELEGRAM_BOT_TOKEN:  ${TELEGRAM_BOT_TOKEN}
+      TELEGRAM_CHAT_ID:    ${TELEGRAM_CHAT_ID}
+      OPENROUTER_API_KEY:  ${OPENROUTER_API_KEY}
+      PIPELINE_CRON:       ${PIPELINE_CRON:-*/30 * * * *}
+    labels:
+      - traefik.enable=true
+      - traefik.http.routers.job-hunter.rule=PathPrefix(`/`)
+      - traefik.http.routers.job-hunter.entrypoints=web
+      - traefik.http.services.job-hunter.loadbalancer.server.port=3000
+    networks:
+      - nexara
+
+  # ── Command Centre (Express) ─────────────────────────────────────────────
+  command-centre:
+    build:
+      context: ./command-centre
+      dockerfile: Dockerfile
+    container_name: nexara-command-centre
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      NODE_ENV:     production
+      DATABASE_URL: postgresql://${POSTGRES_USER:-nexara}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-nexara}
+      PORT:         4200
+    labels:
+      - traefik.enable=true
+      # Only accessible on Tailscale interface (100.x.x.x) — change Host rule when domain ready
+      - traefik.http.routers.command-centre.rule=PathPrefix(`/`)
+      - traefik.http.routers.command-centre.entrypoints=web
+      - traefik.http.services.command-centre.loadbalancer.server.port=4200
+    # Bind directly to Tailscale IP — not exposed on public interface
+    ports:
+      - "${TAILSCALE_IP:-127.0.0.1}:4200:4200"
+    networks:
+      - nexara
+
+volumes:
+  postgres-data:
+  traefik-certs:
+
+networks:
+  nexara:
+    driver: bridge

@@ -1,0 +1,16 @@
+{
+  "name": "nexara-command-centre",
+  "version": "1.0.0",
+  "description": "Nexara Ops Command Centre — Phase 1",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node --watch server.js"
+  },
+  "dependencies": {
+    "better-sqlite3": "^12.6.2",
+    "ejs": "^3.1.10",
+    "express": "^4.21.2",
+    "pg": "^8.20.0"
+  }
+}

@@ -1,0 +1,269 @@
+<%- include('partials/head', { title: 'Hunt' }) %>
+<%- include('partials/nav') %>
+
+<!-- ── Stats Bar ───────────────────────────────────────────────── -->
+<div style="background:var(--surface);border-bottom:1px solid var(--border);" class="flex overflow-x-auto">
+  <% [
+    { k: 'TOTAL JOBS',  v: stats.total,    c: 'var(--text)',  sub: 'all time' },
+    { k: 'TODAY',       v: stats.today,    c: 'var(--green)', sub: 'fetched today' },
+    { k: 'PRIORITY',    v: stats.priority, c: 'var(--green)', sub: 'score ≥ 85' },
+    { k: 'APPLIED',     v: stats.applied,  c: 'var(--blue)',  sub: 'awaiting reply' },
+  ].forEach(s => { %>
+  <div class="px-7 py-4 flex-shrink-0" style="border-right:1px solid var(--border);min-width:136px;">
+    <div class="mono text-2xl font-bold tracking-tight" style="color:<%= s.c %>"><%= s.v %></div>
+    <div class="text-xs mt-0.5 tracking-widest" style="color:var(--text-3);"><%= s.k %></div>
+    <div class="text-xs mt-0.5" style="color:var(--text-4);font-size:10px;"><%= s.sub %></div>
+  </div>
+  <% }) %>
+  <!-- Last poll -->
+  <div class="px-7 py-4 flex-shrink-0 ml-auto flex flex-col justify-center">
+    <div class="flex items-center gap-2">
+      <div class="w-1.5 h-1.5 rounded-full flex-shrink-0" style="background:var(--green);box-shadow:0 0 6px var(--green);"></div>
+      <span class="text-xs tracking-widest" style="color:var(--text-3);">LAST POLL</span>
+    </div>
+    <div class="mono text-sm font-medium mt-1" style="color:var(--text-2);"><%= lastPoll %></div>
+  </div>
+</div>
+
+<!-- ── Controls Bar ───────────────────────────────────────────── -->
+<div class="px-6 py-3 flex items-center gap-2 flex-wrap" style="background:rgba(9,11,15,.8);border-bottom:1px solid var(--border-2);">
+  <span class="text-xs tracking-widest mr-1" style="color:var(--text-4);">FILTER</span>
+
+  <% ['all','priority','alert','applied','new'].forEach(f => { %>
+  <a href="/?filter=<%= f %>" class="ftab <%= filter === f ? 'on' : '' %>">
+    <%= f.toUpperCase() %>
+    <% if (f !== 'all') { %>
+      <% const cnt = f === 'priority' ? stats.priority : f === 'applied' ? stats.applied : '' %>
+      <% if (cnt !== '') { %>
+        <span class="mono ml-1" style="font-size:10px;opacity:.7;"><%= cnt %></span>
+      <% } %>
+    <% } %>
+  </a>
+  <% }) %>
+
+  <!-- Run Hunt -->
+  <button id="run-btn" onclick="runHunt()" class="btn btn-primary ml-auto" style="padding:7px 18px;font-size:12px;font-weight:700;">
+    <svg id="run-icon" width="11" height="11" viewBox="0 0 11 11" fill="currentColor">
+      <path d="M2 1.5L9.5 5.5L2 9.5V1.5Z"/>
+    </svg>
+    <span id="run-label">RUN HUNT</span>
+  </button>
+
+  <span class="mono text-xs" style="color:var(--text-4);"><%= jobs.length %> jobs</span>
+</div>
+
+<!-- ── Job Table ──────────────────────────────────────────────── -->
+<div style="height:calc(100vh - 178px);overflow-y:auto;">
+  <% if (jobs.length === 0) { %>
+  <!-- Empty state -->
+  <div class="flex flex-col items-center justify-center py-28 gap-4">
+    <div class="w-16 h-16 rounded-full flex items-center justify-center" style="background:var(--surface-2);border:1px solid var(--border);">
+      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="var(--text-3)" stroke-width="1.5">
+        <circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/>
+      </svg>
+    </div>
+    <div>
+      <div class="text-sm font-semibold text-center" style="color:var(--text-2);">No jobs yet</div>
+      <div class="text-xs text-center mt-1" style="color:var(--text-3);">Click RUN HUNT to fetch from all platforms</div>
+    </div>
+    <button onclick="runHunt()" class="btn btn-primary" style="padding:8px 20px;font-size:12px;">
+      <svg width="11" height="11" viewBox="0 0 11 11" fill="currentColor"><path d="M2 1.5L9.5 5.5L2 9.5V1.5Z"/></svg>
+      RUN HUNT
+    </button>
+  </div>
+
+  <% } else { %>
+  <table class="w-full" style="border-collapse:collapse;">
+    <colgroup>
+      <col style="width:66px">
+      <col>
+      <col style="width:108px">
+      <col style="width:124px">
+      <col style="width:136px">
+    </colgroup>
+    <thead>
+      <tr style="background:var(--surface);border-bottom:1px solid var(--border);position:sticky;top:0;z-index:10;">
+        <th class="py-3 pl-5 pr-2 text-left" style="font-size:10px;font-weight:600;letter-spacing:.12em;color:var(--text-4);">SCORE</th>
+        <th class="py-3 px-3 text-left" style="font-size:10px;font-weight:600;letter-spacing:.12em;color:var(--text-4);">TITLE</th>
+        <th class="py-3 px-3 text-right" style="font-size:10px;font-weight:600;letter-spacing:.12em;color:var(--text-4);">BUDGET</th>
+        <th class="py-3 px-3 text-left" style="font-size:10px;font-weight:600;letter-spacing:.12em;color:var(--text-4);">TIME · STATUS</th>
+        <th class="py-3 pl-3 pr-5 text-right" style="font-size:10px;font-weight:600;letter-spacing:.12em;color:var(--text-4);">ACTIONS</th>
+      </tr>
+    </thead>
+    <tbody>
+      <%
+        jobs.forEach((job, i) => {
+          const sc = job.score >= 85 ? 'sh' : job.score >= 75 ? 'sm' : job.score >= 60 ? 'so' : 'sl'
+          const tierCls = job.tier === 'priority' ? 'tier-p' : job.tier === 'alert' ? 'tier-a' : ''
+          const propsClass = job.proposals < 5 ? 'props-low' : job.proposals < 12 ? 'props-mid' : 'props-high'
+          const isMins = job.timeAgo && job.timeAgo.includes('m') && !job.timeAgo.includes('h')
+          const isHrs  = job.timeAgo && job.timeAgo.includes('h') && parseInt(job.timeAgo) < 6
+          const tClass = isMins ? 'time-hot' : isHrs ? 'time-warm' : 'time-cold'
+          const statusStyle = {new:'pill-new',draft:'pill-draft',applied:'pill-applied',archived:'pill-archived'}[job.status]||'pill-new'
+      %>
+      <!-- Main row -->
+      <tr id="row-<%= job.id %>" onclick="toggleDetail('<%= job.id %>')"
+          class="job-row <%= tierCls %>"
+          style="border-bottom:1px solid var(--border-2);">
+
+        <!-- Score badge -->
+        <td class="py-3 pl-3 pr-2">
+          <div class="score-badge <%= sc %>">
+            <span class="score-num"><%= job.score %></span>
+            <span class="score-lbl">PTS</span>
+          </div>
+        </td>
+
+        <!-- Title + meta -->
+        <td class="py-3 px-3">
+          <div class="flex items-center gap-1.5 mb-1.5 flex-wrap">
+            <% if (job.tier === 'priority') { %><span class="pill pill-priority">⬤ PRIORITY</span><% } %>
+            <% if (job.tier === 'alert')    { %><span class="pill pill-alert">⬤ ALERT</span><% } %>
+            <% if (job.loom)               { %><span class="pill pill-loom">LOOM</span><% } %>
+            <% if (isMins) { %><span class="pill" style="color:var(--green);border-color:var(--green-ring);background:var(--green-dim);font-size:8px;letter-spacing:.1em;height:16px;">NEW</span><% } %>
+          </div>
+          <div class="font-semibold leading-snug mb-2 truncate" style="font-size:13px;color:var(--text);max-width:420px;"><%= job.title %></div>
+          <div class="flex items-center gap-2 flex-wrap">
+            <span class="platform-tag"><%= job.platform %></span>
+            <% if (job.proposals > 0) { %>
+            <span class="mono text-xs <%= propsClass %>"><%= job.proposals %> props</span>
+            <% } %>
+            <% job.skills.slice(0,3).forEach(s => { %><span class="skill-tag"><%= s %></span><% }) %>
+            <% if (job.skills.length > 3) { %><span style="font-size:10px;color:var(--text-4);">+<%= job.skills.length-3 %></span><% } %>
+          </div>
+        </td>
+
+        <!-- Budget -->
+        <td class="py-3 px-3 text-right">
+          <div class="mono font-semibold" style="font-size:14px;color:var(--green);"><%= job.budget || '—' %></div>
+          <% if (job.type) { %>
+          <div style="font-size:10px;color:var(--text-3);margin-top:2px;"><%= job.type %></div>
+          <% } %>
+        </td>
+
+        <!-- Time + Status -->
+        <td class="py-3 px-3">
+          <div class="mono font-medium mb-1.5 <%= tClass %>" style="font-size:12px;"><%= job.timeAgo %></div>
+          <span class="pill <%= statusStyle %>"><%= job.status.toUpperCase() %></span>
+        </td>
+
+        <!-- Actions -->
+        <td class="py-3 pl-3 pr-5 text-right">
+          <div class="flex gap-1.5 justify-end" onclick="event.stopPropagation()">
+            <% if (job.status !== 'applied') { %>
+            <button onclick="applyJob('<%= job.id %>',this)" class="btn btn-primary">APPLY</button>
+            <% } %>
+            <% if (job.status !== 'archived') { %>
+            <button onclick="archiveJob('<%= job.id %>',this)" class="btn btn-ghost">SKIP</button>
+            <% } %>
+          </div>
+        </td>
+      </tr>
+
+      <!-- Expanded detail row (hidden, animates open) -->
+      <tr id="detail-<%= job.id %>" style="display:none;">
+        <td colspan="5" style="padding:0;border-bottom:1px solid var(--border);">
+          <div id="detail-inner-<%= job.id %>" class="job-detail-inner">
+            <div class="flex gap-5">
+              <!-- Brief -->
+              <% if (job.brief) { %>
+              <div class="flex-1 rounded-lg p-4" style="background:rgba(16,185,129,.05);border:1px solid rgba(16,185,129,.15);">
+                <div class="text-xs font-bold tracking-widest mb-2" style="color:var(--green);">AI BRIEF</div>
+                <div style="font-size:12px;color:var(--text-2);line-height:1.7;"><%= job.brief %></div>
+              </div>
+              <% } else { %>
+              <div class="flex-1 rounded-lg p-4 flex items-center" style="background:rgba(30,41,59,.2);border:1px dashed var(--border);">
+                <span style="font-size:12px;color:var(--text-4);">No AI brief — run hunt to generate proposals.</span>
+              </div>
+              <% } %>
+              <!-- Client details -->
+              <div class="flex-shrink-0 space-y-2" style="width:200px;">
+                <% if (job.clientName)   { %><div style="font-size:11px;color:var(--text-3);">Client: <span style="color:var(--text-2)"><%= job.clientName %></span></div><% } %>
+                <% if (job.clientRating) { %><div style="font-size:11px;color:var(--text-3);">Rating: <span style="color:var(--amber)"><%= job.clientRating %>★</span></div><% } %>
+                <% if (job.clientSpent)  { %><div style="font-size:11px;color:var(--text-3);">Spent: <span class="mono" style="color:var(--text-2)"><%= job.clientSpent %></span></div><% } %>
+                <% if (job.clientVerified){ %><div style="font-size:11px;color:var(--blue);">✓ Verified client</div><% } %>
+                <% if (job.url) { %>
+                <a href="<%= job.url %>" target="_blank" rel="noopener noreferrer"
+                   style="display:block;font-size:11px;color:var(--blue);margin-top:8px;text-decoration:none;"
+                   onmouseover="this.style.textDecoration='underline'" onmouseout="this.style.textDecoration='none'">
+                  View on <%= job.platform %> →
+                </a>
+                <% } %>
+              </div>
+            </div>
+          </div>
+        </td>
+      </tr>
+      <% }) %>
+    </tbody>
+  </table>
+  <% } %>
+</div>
+
+<!-- ── Toast ──────────────────────────────────────────────────── -->
+<div id="toast"><span id="toast-msg"></span></div>
+
+<script>
+function toast(msg, type) {
+  const el = document.getElementById('toast')
+  document.getElementById('toast-msg').textContent = msg
+  el.className = type === 'success' ? 't-ok' : type === 'error' ? 't-err' : ''
+  el.classList.add('show')
+  clearTimeout(el._t)
+  el._t = setTimeout(() => el.classList.remove('show'), 3000)
+}
+
+function toggleDetail(id) {
+  const row   = document.getElementById('detail-' + id)
+  const inner = document.getElementById('detail-inner-' + id)
+  if (row.style.display === 'none' || row.style.display === '') {
+    row.style.display = 'table-row'
+    requestAnimationFrame(() => inner.classList.add('open'))
+  } else {
+    inner.classList.remove('open')
+    setTimeout(() => { row.style.display = 'none' }, 240)
+  }
+}
+
+async function runHunt() {
+  const btn  = document.getElementById('run-btn')
+  const icon = document.getElementById('run-icon')
+  const lbl  = document.getElementById('run-label')
+  btn.disabled = true; lbl.textContent = 'RUNNING…'
+  icon.innerHTML = '<animateTransform attributeName="transform" type="rotate" from="0 5.5 5.5" to="360 5.5 5.5" dur=".8s" repeatCount="indefinite"/><circle cx="5.5" cy="5.5" r="4" stroke="currentColor" stroke-width="1.5" fill="none" stroke-dasharray="14" stroke-dashoffset="4"/>'
+
+  try {
+    const r = await fetch('/api/run-hunt', { method: 'POST' })
+    const d = await r.json()
+    if (d.ok) {
+      toast(`Hunt complete — ${d.added ?? 0} new jobs`, 'success')
+      setTimeout(() => location.reload(), 1600)
+    } else { toast(d.error || 'Hunt failed', 'error') }
+  } catch { toast('Port 3000 not reachable — is Next.js running?', 'error') }
+  finally {
+    btn.disabled = false; lbl.textContent = 'RUN HUNT'
+    icon.innerHTML = '<path d="M2 1.5L9.5 5.5L2 9.5V1.5Z"/>'
+  }
+}
+
+async function applyJob(id, btn) {
+  const r = await fetch('/api/jobs/' + id + '/apply', { method: 'PUT', headers: {'Content-Type':'application/json'}, body: '{}' })
+  const d = await r.json()
+  if (d.ok) {
+    btn.textContent = 'APPLIED'; btn.disabled = true
+    btn.className = 'btn btn-ghost'; btn.style.opacity = '.5'
+    toast('Marked as applied', 'success')
+  }
+}
+
+async function archiveJob(id, btn) {
+  const r = await fetch('/api/jobs/' + id + '/archive', { method: 'PUT', headers: {'Content-Type':'application/json'}, body: '{}' })
+  const d = await r.json()
+  if (d.ok) {
+    document.getElementById('row-' + id).style.opacity = '.22'
+    btn.disabled = true; toast('Skipped', 'info')
+  }
+}
+</script>
+</body>
+</html>

@@ -2,10 +2,27 @@ export interface Job {
   id: string
   title: string
   company: string
-  location: string
-  status: 'applied' | 'interview' | 'offer' | 'rejected'
-  date: string
+  location?: string
+  status: string
+  date?: string
   description: string
+  score: number
+  tier: string
+  budget: string
+  type: string
+  posted: string
+  proposals: number
+  platform?: string
+  url?: string | null
+  client: {
+    rating: number
+    spent: string
+    hired: number
+    verified: boolean
+  }
+  tags: string[]
+  loom: boolean
+  brief: string | null
 }
 
 export interface User {

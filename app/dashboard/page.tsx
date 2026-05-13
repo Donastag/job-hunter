@@ -2,16 +2,24 @@
 
 import { useState, useEffect } from 'react'
 import TelegramChat from '@/components/telegram-chat'
+import ProposalModal from '@/components/proposal-modal'
+import { signOut } from 'next-auth/react'
+import { Bell, LogOut, Trash, X, Settings, Key, Globe, User, Shield, Moon, Sun } from 'lucide-react'
 
 interface Job {
-  id: number
+  id: string
+  title: string
+  company: string
+  status: string
+  description: string
   score: number
   tier: string
-  title: string
   budget: string
   type: string
   posted: string
   proposals: number
+  platform: string
+  url: string | null
   client: {
     rating: number
     spent: string
@@ -19,7 +27,6 @@ interface Job {
     verified: boolean
   }
   tags: string[]
-  status: string
   loom: boolean
   brief: string | null
 }
@@ -31,98 +38,45 @@ interface PipelineStage {
   color: string
 }
 
-interface Stat {
-  label: string
-  value: string
-  sub: string
-}
-
 interface Alert {
   type: string
   time: string
   msg: string
 }
 
-const JOBS = [
-  {
-    id: 1, score: 94, tier: "priority",
-    title: "AI Workflow Architect — Series A SaaS (n8n + OpenAI)",
-    budget: "$4,500", type: "Fixed", posted: "4 min ago", proposals: 2,
-    client: { rating: 4.9, spent: "$87k", hired: 34, verified: true },
-    tags: ["n8n", "OpenAI", "SaaS", "AI automation"],
-    status: "new", loom: true,
-    brief: "Client needs an AI-powered lead qualification workflow replacing manual Salesforce entry. Stack is Next.js + Airtable. Budget is real — they've spent well before.",
-  },
-  {
-    id: 2, score: 81, tier: "alert",
-    title: "Fix Broken Stripe Webhook Integration (Node.js)",
-    budget: "$350", type: "Fixed", posted: "22 min ago", proposals: 7,
-    client: { rating: 4.7, spent: "$12k", hired: 18, verified: true },
-    tags: ["Node.js", "Stripe", "API", "bug fix"],
-    status: "new", loom: false,
-    brief: "Webhook failing silently on subscription upgrades. Classic missed event type. 2-3 hour job max. Easy review.",
-  },
-  {
-    id: 3, score: 78, tier: "alert",
-    title: "Security Audit — HealthTech SaaS (HIPAA Compliance Review)",
-    budget: "$2,200", type: "Fixed", posted: "38 min ago", proposals: 4,
-    client: { rating: 4.8, spent: "$31k", hired: 9, verified: true },
-    tags: ["security", "HIPAA", "audit", "SaaS"],
-    status: "draft", loom: false,
-    brief: "Pre-launch security review for a telehealth platform. They have the budget and urgency. Strong retainer potential post-audit.",
-  },
-  {
-    id: 4, score: 71, tier: "normal",
-    title: "Build REST API + Admin Dashboard for E-commerce Tool",
-    budget: "$85/hr", type: "Hourly", posted: "1 hr ago", proposals: 11,
-    client: { rating: 4.5, spent: "$8k", hired: 6, verified: true },
-    tags: ["REST API", "Next.js", "dashboard", "e-commerce"],
-    status: "new", loom: false,
-    brief: null,
-  },
-  {
-    id: 5, score: 67, tier: "normal",
-    title: "Deploy Existing Next.js App to AWS (CI/CD Setup)",
-    budget: "$600", type: "Fixed", posted: "2 hr ago", proposals: 9,
-    client: { rating: 4.6, spent: "$4k", hired: 5, verified: true },
-    tags: ["AWS", "CI/CD", "DevOps", "Next.js"],
-    status: "applied", loom: false,
-    brief: null,
-  },
-  {
-    id: 6, score: 58, tier: "normal",
-    title: "LangChain Chatbot Integration for Internal Knowledge Base",
-    budget: "$1,800", type: "Fixed", posted: "3 hr ago", proposals: 16,
-    client: { rating: 4.3, spent: "$2k", hired: 3, verified: false },
-    tags: ["LangChain", "chatbot", "Python", "RAG"],
-    status: "new", loom: false,
-    brief: null,
-  },
-];
+function mapJob(r: Record<string, unknown>): Job {
+  let tags: string[] = []
+  try { tags = JSON.parse(r.skills as string || '[]') } catch { tags = [] }
+  return {
+    id: r.id as string,
+    title: r.title as string,
+    company: (r.clientName as string) || '',
+    status: (r.status as string) || 'new',
+    description: (r.description as string) || '',
+    score: (r.score as number) || 0,
+    tier: (r.tier as string) || 'normal',
+    budget: (r.budget as string) || '—',
+    type: (r.type as string) || '',
+    posted: (r.timeAgo as string) || (r.ageLabel as string) || '—',
+    proposals: (r.proposals as number) || 0,
+    platform: (r.platform as string) || '',
+    url: r.url as string | null,
+    client: {
+      rating: (r.clientRating as number) || 0,
+      spent: (r.clientSpent as string) || '—',
+      hired: (r.clientHired as number) || 0,
+      verified: (r.clientVerified as boolean) || false,
+    },
+    tags,
+    loom: (r.loom as boolean) || false,
+    brief: r.brief as string | null,
+  }
+}
 
-const PIPELINE = [
-  { stage: "Contacted", count: 4, value: "$9,200", color: "#3B82F6" },
-  { stage: "Engaged", count: 2, value: "$6,800", color: "#8B5CF6" },
-  { stage: "Call Booked", count: 1, value: "$4,500", color: "#F59E0B" },
-  { stage: "Won", count: 3, value: "$7,350", color: "#10B981" },
-];
-
-const STATS = [
-  { label: "This Week", value: "12", sub: "proposals sent" },
-  { label: "Response Rate", value: "31%", sub: "↑ 4% vs last week" },
-  { label: "Win Rate", value: "22%", sub: "rolling 30 days" },
-  { label: "MTD Revenue", value: "$8,400", sub: "of $12,000 target" },
-  { label: "Active Pipeline", value: "$20,500", sub: "weighted value" },
-  { label: "Last Poll", value: "2m ago", sub: "Upwork + LinkedIn" },
-];
-
-const ALERTS = [
-  { type: "priority", time: "4m", msg: "Score 94 — AI Workflow Architect — $4,500 fixed — 2 proposals" },
-  { type: "alert", time: "22m", msg: "Score 81 — Stripe Webhook Fix — $350 fixed — 7 proposals" },
-  { type: "signal", time: "1h", msg: "LinkedIn: Maya Chen (CTO @ FlowDesk) posted about automation pain" },
-  { type: "win", time: "2h", msg: "Contract won — DevOps Setup — $1,200 — Moved to pipeline" },
-  { type: "alert", time: "3h", msg: "Score 78 — HIPAA Security Audit — $2,200 — 4 proposals" },
-];
+const PIPELINE_COLORS: Record<string, string> = {
+  contacted: "#3B82F6", engaged: "#8B5CF6",
+  call_booked: "#F59E0B", negotiating: "#F97316", won: "#10B981",
+}
 
 const SCORE_COLOR = (s: number) =>
   s >= 85 ? "#10B981" : s >= 75 ? "#3B82F6" : s >= 60 ? "#94A3B8" : "#64748B";
@@ -130,21 +84,68 @@ const SCORE_COLOR = (s: number) =>
 const SCORE_BG = (s: number) =>
   s >= 85 ? "rgba(16,185,129,0.12)" : s >= 75 ? "rgba(59,130,246,0.12)" : "rgba(100,116,139,0.1)";
 
-const TIER_LABEL = { priority: "PRIORITY", alert: "ALERT", normal: "" };
-
 export default function DashboardPage() {
   const [tab, setTab] = useState("feed");
   const [selected, setSelected] = useState<Job | null>(null);
   const [filter, setFilter] = useState("all");
   const [pulse, setPulse] = useState(false);
   const [alertsOpen, setAlertsOpen] = useState(false);
+  const [proposalModalOpen, setProposalModalOpen] = useState(false);
+  const [settingsOpen, setSettingsOpen] = useState(false);
+  const [jobs, setJobs] = useState<Job[]>([]);
+  const [pipeline, setPipeline] = useState<Record<string, Array<{name: string; value: number; source: string; stage: string}>>>({});
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    async function fetchData() {
+      try {
+        const [jobsRes, pipeRes] = await Promise.all([
+          fetch('/api/jobs'),
+          fetch('/api/pipeline'),
+        ])
+        const [jobsData, pipeData] = await Promise.all([jobsRes.json(), pipeRes.json()])
+        if (Array.isArray(jobsData)) setJobs(jobsData.map(mapJob))
+        if (pipeData && typeof pipeData === 'object') setPipeline(pipeData)
+      } catch (e) {
+        console.error('fetch error', e)
+      } finally {
+        setLoading(false)
+      }
+    }
+    fetchData()
+  }, [])
+
+  const appliedCount = jobs.filter(j => j.status === 'applied').length
+  const priorityCount = jobs.filter(j => j.score >= 85).length
+  const today = new Date().toDateString()
+
+  const STATS = [
+    { label: "TOTAL JOBS", value: String(jobs.length), sub: "all time" },
+    { label: "PRIORITY", value: String(priorityCount), sub: "score ≥ 85" },
+    { label: "APPLIED", value: String(appliedCount), sub: "awaiting reply" },
+    { label: "WIN RATE", value: "22%", sub: "rolling 30 days" },
+    { label: "PIPELINE VALUE", value: "$20,500", sub: "weighted" },
+    { label: "LAST POLL", value: "2m ago", sub: "Upwork + LinkedIn" },
+  ]
+
+  const PIPELINE_SIDEBAR: PipelineStage[] = Object.entries(PIPELINE_COLORS)
+    .map(([key, color]) => {
+      const leads = pipeline[key] || []
+      const val = leads.reduce((s: number, l: {value: number}) => s + (l.value || 0), 0)
+      return {
+        stage: key.replace('_', ' ').replace(/\b\w/g, c => c.toUpperCase()),
+        count: leads.length,
+        value: val > 0 ? `$${val.toLocaleString()}` : '$0',
+        color,
+      }
+    })
 
   useEffect(() => {
     const t = setInterval(() => setPulse(p => !p), 1800);
     return () => clearInterval(t);
   }, []);
 
-  const filtered = JOBS.filter(j =>
+  const filtered = jobs.filter(j =>
     filter === "all" ? true :
     filter === "priority" ? j.score >= 85 :
     filter === "draft" ? j.status === "draft" :
@@ -153,54 +154,12 @@ export default function DashboardPage() {
 
   return (
     <div style={{
-      minHeight: "100vh", 
-      background: "linear-gradient(135deg, #0f172a 0%, #1e293b 50%, #0f172a 100%)",
+      minHeight: "100vh",
+      background: "#090B0F",
       color: "#E2E8F0",
-      fontFamily: "'Inter', 'SF Pro Display', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif",
+      fontFamily: "var(--font-geist-sans), 'Inter', system-ui, sans-serif",
       display: "flex", flexDirection: "column",
-      position: "relative",
-      overflow: "hidden",
     }}>
-      {/* Animated Background Grid */}
-      <div style={{
-        position: "absolute", top: 0, left: 0, right: 0, bottom: 0,
-        background: `
-          linear-gradient(rgba(59,130,246,0.1) 1px, transparent 1px),
-          linear-gradient(90deg, rgba(59,130,246,0.1) 1px, transparent 1px)
-        `,
-        backgroundSize: "50px 50px",
-        opacity: 0.3,
-        animation: "gridMove 20s linear infinite",
-        pointerEvents: "none",
-        zIndex: 0,
-      }} />
-      
-      {/* Floating Particles */}
-      <div style={{
-        position: "absolute", top: 0, left: 0, right: 0, bottom: 0,
-        pointerEvents: "none", zIndex: 1,
-      }}>
-        <div style={{
-          position: "absolute", top: "10%", left: "10%",
-          width: 4, height: 4, background: "#10B981", borderRadius: "50%",
-          animation: "float 6s ease-in-out infinite", opacity: 0.6,
-        }} />
-        <div style={{
-          position: "absolute", top: "20%", right: "15%",
-          width: 3, height: 3, background: "#3B82F6", borderRadius: "50%",
-          animation: "float 8s ease-in-out infinite reverse", opacity: 0.5,
-        }} />
-        <div style={{
-          position: "absolute", bottom: "15%", left: "20%",
-          width: 5, height: 5, background: "#F59E0B", borderRadius: "50%",
-          animation: "float 10s ease-in-out infinite", opacity: 0.7,
-        }} />
-        <div style={{
-          position: "absolute", top: "60%", right: "25%",
-          width: 3, height: 3, background: "#8B5CF6", borderRadius: "50%",
-          animation: "float 7s ease-in-out infinite reverse", opacity: 0.5,
-        }} />
-      </div>
       {/* ── TOP NAV ── */}
       <nav style={{
         background: "#0D1117", borderBottom: "1px solid #1E293B",
@@ -225,18 +184,20 @@ export default function DashboardPage() {
             background: pulse ? "#10B981" : "#064E3B",
             transition: "background 0.4s", boxShadow: pulse ? "0 0 8px #10B981" : "none",
           }} />
-          <span style={{ fontSize: 11, color: "#475569", letterSpacing: "0.08em" }}>LIVE</span>
+          <span style={{ fontSize: 11, color: "#4B5563", letterSpacing: "0.08em" }}>LIVE</span>
         </div>
 
         <div style={{ display: "flex", gap: 4 }}>
           {["feed","pipeline","templates","analytics"].map(t => (
             <button key={t} onClick={() => setTab(t)} style={{
               background: tab === t ? "rgba(16,185,129,0.1)" : "transparent",
-              border: tab === t ? "1px solid rgba(16,185,129,0.3)" : "1px solid transparent",
+              border: tab === t ? "1px solid rgba(16,185,129,0.35)" : "1px solid transparent",
               color: tab === t ? "#10B981" : "#64748B",
-              padding: "6px 14px", borderRadius: 6, cursor: "pointer",
+              padding: "5px 14px", borderRadius: 6, cursor: "pointer",
               fontSize: 11, fontFamily: "inherit", letterSpacing: "0.08em",
-              textTransform: "uppercase", transition: "all 0.15s",
+              textTransform: "uppercase",
+              transition: "all 150ms ease-out",
+              fontWeight: tab === t ? 700 : 500,
             }}>{t}</button>
           ))}
         </div>
@@ -252,14 +213,144 @@ export default function DashboardPage() {
               width: 6, height: 6, borderRadius: "50%", background: "#EF4444",
               animation: "ping 1.5s infinite",
             }} />
-            ALERTS ·{ALERTS.length}
+            ALERTS · {priorityCount}
           </button>
-          <div style={{
-            width: 32, height: 32, borderRadius: "50%",
-            background: "linear-gradient(135deg, #1E293B, #334155)",
-            display: "flex", alignItems: "center", justifyContent: "center",
-            fontSize: 12, color: "#94A3B8", border: "1px solid #334155",
-          }}>OP</div>
+          <button onClick={() => setAlertsOpen(false)} style={{
+            background: "rgba(100,116,139,0.1)", border: "1px solid rgba(100,116,139,0.3)",
+            color: "#94A3B8", padding: "6px 12px", borderRadius: 6, cursor: "pointer",
+            fontSize: 11, fontFamily: "inherit", letterSpacing: "0.06em", display: "flex",
+            alignItems: "center", gap: 6,
+          }}>
+            <Trash size={12} />
+            CLEAR
+          </button>
+          <div style={{ position: "relative" }}>
+            <button 
+              onClick={() => setSettingsOpen(!settingsOpen)}
+              style={{
+                background: "linear-gradient(135deg, #1E293B, #334155)",
+                border: "1px solid #334155",
+                borderRadius: "50%",
+                width: 32, height: 32,
+                display: "flex", alignItems: "center", justifyContent: "center",
+                cursor: "pointer",
+                transition: "all 0.2s",
+                boxShadow: settingsOpen ? "0 0 15px rgba(16,185,129,0.3)" : "none",
+              }}
+            >
+              <User size={14} color="#94A3B8" />
+            </button>
+            
+            {settingsOpen && (
+              <div style={{
+                position: "absolute", top: 40, right: 0,
+                background: "#0D1117", border: "1px solid #1E293B",
+                borderRadius: 8, minWidth: 220, zIndex: 50,
+                boxShadow: "0 10px 25px rgba(0,0,0,0.3)",
+                animation: "fadeIn 0.2s ease-out",
+              }}>
+                <div style={{
+                  padding: "12px 16px", borderBottom: "1px solid #1E293B",
+                  fontSize: 11, color: "#64748B", letterSpacing: "0.06em",
+                  background: "rgba(16,185,129,0.05)",
+                }}>
+                  ACCOUNT SETTINGS
+                </div>
+                
+                <div style={{ padding: "8px 0" }}>
+                  {/* Profile Section */}
+                  <div style={{ padding: "8px 16px", borderBottom: "1px solid #0F172A" }}>
+                    <div style={{ fontSize: 12, color: "#F1F5F9", fontWeight: 600 }}>Oliver P.</div>
+                    <div style={{ fontSize: 10, color: "#64748B" }}>oliver@example.com</div>
+                  </div>
+
+                  {/* Platform API Settings */}
+                  <div style={{ padding: "8px 16px", borderBottom: "1px solid #0F172A" }}>
+                    <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 6 }}>
+                      <Globe size={14} color="#3B82F6" />
+                      <span style={{ fontSize: 11, color: "#CBD5E1", fontWeight: 600 }}>Platform API</span>
+                    </div>
+                    {[
+                      { name: "Upwork RSS", status: "active" },
+                      { name: "LinkedIn", status: "active" },
+                      { name: "Contra", status: "pending" },
+                    ].map((plat, i) => (
+                      <div key={i} style={{
+                        display: "flex", justifyContent: "space-between", alignItems: "center",
+                        padding: "6px 8px", borderRadius: 4, margin: "2px 0",
+                        background: plat.status === "active" ? "rgba(16,185,129,0.08)" : "rgba(100,116,139,0.08)",
+                        border: plat.status === "active" ? "1px solid rgba(16,185,129,0.3)" : "1px solid rgba(100,116,139,0.3)",
+                      }}>
+                        <span style={{ fontSize: 10, color: "#94A3B8" }}>{plat.name}</span>
+                        <div style={{
+                          width: 6, height: 6, borderRadius: "50%",
+                          background: plat.status === "active" ? "#10B981" : "#334155",
+                          boxShadow: plat.status === "active" ? "0 0 6px #10B981" : "none",
+                        }} />
+                      </div>
+                    ))}
+                  </div>
+
+                  {/* Security & API Keys */}
+                  <div style={{ padding: "8px 16px", borderBottom: "1px solid #0F172A" }}>
+                    <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 6 }}>
+                      <Shield size={14} color="#8B5CF6" />
+                      <span style={{ fontSize: 11, color: "#CBD5E1", fontWeight: 600 }}>Security</span>
+                    </div>
+                    <div style={{ fontSize: 10, color: "#64748B", marginBottom: 4 }}>API Keys & Webhooks</div>
+                    <button style={{
+                      background: "rgba(139,92,246,0.1)", border: "1px solid rgba(139,92,246,0.3)",
+                      color: "#8B5CF6", padding: "4px 8px", borderRadius: 4, cursor: "pointer",
+                      fontSize: 10, width: "100%", textAlign: "left",
+                    }}>Manage Keys</button>
+                  </div>
+
+                  {/* Preferences */}
+                  <div style={{ padding: "8px 16px", borderBottom: "1px solid #0F172A" }}>
+                    <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 6 }}>
+                      <Settings size={14} color="#F59E0B" />
+                      <span style={{ fontSize: 11, color: "#CBD5E1", fontWeight: 600 }}>Preferences</span>
+                    </div>
+                    <div style={{ fontSize: 10, color: "#64748B", marginBottom: 4 }}>Theme & Notifications</div>
+                    <div style={{ display: "flex", gap: 4 }}>
+                      <button style={{
+                        background: "rgba(245,158,11,0.1)", border: "1px solid rgba(245,158,11,0.3)",
+                        color: "#F59E0B", padding: "4px 8px", borderRadius: 4, cursor: "pointer",
+                        fontSize: 10, flex: 1, display: "flex", alignItems: "center", gap: 4,
+                      }}>
+                        <Sun size={12} /> Light
+                      </button>
+                      <button style={{
+                        background: "rgba(100,116,139,0.1)", border: "1px solid rgba(100,116,139,0.3)",
+                        color: "#94A3B8", padding: "4px 8px", borderRadius: 4, cursor: "pointer",
+                        fontSize: 10, flex: 1, display: "flex", alignItems: "center", gap: 4,
+                      }}>
+                        <Moon size={12} /> Dark
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Logout */}
+                  <div style={{ padding: "8px 16px" }}>
+                    <button 
+                      onClick={() => signOut()}
+                      style={{
+                        background: "rgba(239,68,68,0.1)", border: "1px solid rgba(239,68,68,0.3)",
+                        color: "#EF4444", padding: "8px 12px", borderRadius: 6, cursor: "pointer",
+                        fontSize: 11, width: "100%", display: "flex", alignItems: "center", gap: 8,
+                        transition: "all 0.2s",
+                      }}
+                      onMouseEnter={(e) => e.currentTarget.style.background = "rgba(239,68,68,0.2)"}
+                      onMouseLeave={(e) => e.currentTarget.style.background = "rgba(239,68,68,0.1)"}
+                    >
+                      <LogOut size={14} />
+                      <span>Sign Out</span>
+                    </button>
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
         </div>
       </nav>
 
@@ -272,25 +363,29 @@ export default function DashboardPage() {
           maxHeight: "calc(100vh - 56px)", overflowY: "auto",
         }}>
           <div style={{ padding: "16px 20px", borderBottom: "1px solid #1E293B" }}>
-            <span style={{ fontSize: 11, color: "#64748B", letterSpacing: "0.1em" }}>RECENT ALERTS</span>
+            <span style={{ fontSize: 11, color: "#94A3B8", letterSpacing: "0.1em", fontWeight: 600 }}>RECENT ALERTS</span>
           </div>
-          {ALERTS.map((a, i) => (
-            <div key={i} style={{
+          {jobs.filter(j => j.score >= 75).slice(0, 8).map((j, i) => (
+            <div key={j.id} style={{
               padding: "14px 20px", borderBottom: "1px solid #0F172A",
               display: "flex", gap: 12, alignItems: "flex-start",
               background: i === 0 ? "rgba(16,185,129,0.04)" : "transparent",
             }}>
               <div style={{
                 width: 8, height: 8, borderRadius: "50%", marginTop: 5, flexShrink: 0,
-                background: a.type === "priority" ? "#10B981" : a.type === "win" ? "#3B82F6" :
-                  a.type === "signal" ? "#F59E0B" : "#8B5CF6",
+                background: j.score >= 85 ? "#10B981" : "#3B82F6",
               }} />
               <div>
-                <div style={{ fontSize: 12, color: "#CBD5E1", lineHeight: 1.5 }}>{a.msg}</div>
-                <div style={{ fontSize: 10, color: "#475569", marginTop: 4 }}>{a.time} ago</div>
+                <div style={{ fontSize: 12, color: "#CBD5E1", lineHeight: 1.5 }}>
+                  Score {j.score} — {j.title.slice(0, 60)}{j.title.length > 60 ? '…' : ''} — {j.budget}
+                </div>
+                <div style={{ fontSize: 10, color: "#4B5563", marginTop: 4 }}>{j.posted}</div>
               </div>
             </div>
           ))}
+          {jobs.filter(j => j.score >= 75).length === 0 && (
+            <div style={{ padding: "20px", fontSize: 12, color: "#4B5563" }}>No priority alerts — run hunt to fetch jobs.</div>
+          )}
         </div>
       )}
 
@@ -304,13 +399,16 @@ export default function DashboardPage() {
             padding: "14px 24px", borderRight: "1px solid #1E293B",
             flexShrink: 0, minWidth: 140,
           }}>
-            <div style={{ fontSize: 18, fontWeight: 700, color: "#F1F5F9", letterSpacing: "-0.02em" }}>
+            <div style={{
+              fontSize: 20, fontWeight: 700, color: "#F1F5F9", letterSpacing: "-0.02em",
+              fontFamily: "var(--font-geist-mono), monospace",
+            }}>
               {s.value}
             </div>
-            <div style={{ fontSize: 10, color: "#475569", marginTop: 2, letterSpacing: "0.06em" }}>
+            <div style={{ fontSize: 10, color: "#64748B", marginTop: 3, letterSpacing: "0.08em" }}>
               {s.label}
             </div>
-            <div style={{ fontSize: 10, color: "#334155", marginTop: 1 }}>{s.sub}</div>
+            <div style={{ fontSize: 10, color: "#4B5563", marginTop: 1 }}>{s.sub}</div>
           </div>
         ))}
       </div>
@@ -325,7 +423,7 @@ export default function DashboardPage() {
             <div style={{ flex: 1, overflowY: "auto", padding: "20px 24px" }}>
               {/* Filters */}
               <div style={{ display: "flex", gap: 8, marginBottom: 20, alignItems: "center" }}>
-                <span style={{ fontSize: 11, color: "#475569", letterSpacing: "0.08em", marginRight: 4 }}>FILTER</span>
+                <span style={{ fontSize: 11, color: "#64748B", letterSpacing: "0.08em", marginRight: 4 }}>FILTER</span>
                 {["all","priority","draft","applied"].map(f => (
                   <button key={f} onClick={() => setFilter(f)} style={{
                     background: filter === f ? "rgba(16,185,129,0.15)" : "rgba(30,41,59,0.5)",
@@ -336,50 +434,72 @@ export default function DashboardPage() {
                     textTransform: "uppercase", transition: "all 0.15s",
                   }}>{f}</button>
                 ))}
-                <div style={{ marginLeft: "auto", fontSize: 11, color: "#334155" }}>
+                <div style={{ marginLeft: "auto", fontSize: 11, color: "#4B5563", fontFamily: "var(--font-geist-mono), monospace" }}>
                   {filtered.length} jobs · last polled 2m ago
                 </div>
               </div>
 
               {/* Job Cards */}
+              {loading && (
+                <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+                  {[1,2,3].map(i => (
+                    <div key={i} style={{
+                      background: "#0D1117", border: "1px solid #1E2D3D",
+                      borderRadius: 8, padding: "16px 18px", borderLeft: "3px solid #1E2D3D",
+                    }}>
+                      <div style={{ display: "flex", gap: 14, alignItems: "center" }}>
+                        <div style={{ width: 52, height: 52, borderRadius: "50%", background: "#111827" }} />
+                        <div style={{ flex: 1 }}>
+                          <div style={{ height: 13, background: "#111827", borderRadius: 4, width: "60%", marginBottom: 8 }} />
+                          <div style={{ height: 11, background: "#111827", borderRadius: 4, width: "40%" }} />
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+              {!loading && filtered.length === 0 && (
+                <div style={{ textAlign: "center", padding: "60px 0", color: "#4B5563", fontSize: 13 }}>
+                  No jobs match this filter — run a hunt to fetch new listings.
+                </div>
+              )}
               <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
                 {filtered.map(job => (
                   <div key={job.id}
                     onClick={() => setSelected(selected?.id === job.id ? null : job)}
                     style={{
                       background: selected?.id === job.id ? "#0F1A2E" : "#0D1117",
-                      border: selected?.id === job.id
-                        ? "1px solid rgba(16,185,129,0.4)"
-                        : job.tier === "priority" ? "1px solid rgba(16,185,129,0.2)"
-                        : "1px solid #1E293B",
+                      borderTop: selected?.id === job.id ? "1px solid rgba(16,185,129,0.4)" : "1px solid #1E293B",
+                      borderRight: selected?.id === job.id ? "1px solid rgba(16,185,129,0.4)" : "1px solid #1E293B",
+                      borderBottom: selected?.id === job.id ? "1px solid rgba(16,185,129,0.4)" : "1px solid #1E293B",
+                      borderLeft: selected?.id === job.id
+                        ? "3px solid #10B981"
+                        : job.tier === "priority" ? "3px solid rgba(16,185,129,0.55)"
+                        : job.tier === "alert" ? "3px solid rgba(59,130,246,0.5)"
+                        : "3px solid transparent",
                       borderRadius: 8, padding: "16px 18px", cursor: "pointer",
-                      transition: "all 0.15s",
-                      boxShadow: job.tier === "priority" ? "0 0 20px rgba(16,185,129,0.06)" : "none",
+                      transition: "all 150ms ease-out",
                     }}
                   >
                     <div style={{ display: "flex", alignItems: "flex-start", gap: 14 }}>
-                      {/* Score Badge */}
+                      {/* Score Badge — circular */}
                       <div style={{
-                        width: 52, height: 52, borderRadius: 8, flexShrink: 0,
+                        width: 52, height: 52, borderRadius: "50%", flexShrink: 0,
                         background: SCORE_BG(job.score),
-                        border: `1px solid ${SCORE_COLOR(job.score)}40`,
+                        border: `2px solid ${SCORE_COLOR(job.score)}55`,
                         display: "flex", flexDirection: "column",
                         alignItems: "center", justifyContent: "center",
-                        position: "relative",
-                        boxShadow: `0 0 15px ${SCORE_COLOR(job.score)}20`,
-                        transition: "all 0.3s ease",
+                        boxShadow: `0 0 16px ${SCORE_COLOR(job.score)}22`,
+                        transition: "transform 150ms ease-out",
                       }}>
-                        {/* Inner glow effect */}
                         <div style={{
-                          position: "absolute", inset: -2, borderRadius: 8,
-                          background: `radial-gradient(circle at center, ${SCORE_COLOR(job.score)}30 0%, transparent 70%)`,
-                          zIndex: -1,
-                        }} />
-                        <div style={{ fontSize: 18, fontWeight: 700, color: SCORE_COLOR(job.score), lineHeight: 1 }}>
+                          fontSize: 17, fontWeight: 700, color: SCORE_COLOR(job.score), lineHeight: 1,
+                          fontFamily: "var(--font-geist-mono), monospace",
+                        }}>
                           {job.score}
                         </div>
-                        <div style={{ fontSize: 8, color: SCORE_COLOR(job.score) + "99", letterSpacing: "0.06em" }}>
-                          SCORE
+                        <div style={{ fontSize: 7, color: SCORE_COLOR(job.score) + "88", letterSpacing: "0.1em", marginTop: 1 }}>
+                          PTS
                         </div>
                       </div>
 
@@ -404,7 +524,7 @@ export default function DashboardPage() {
                               background: "rgba(245,158,11,0.1)", border: "1px solid rgba(245,158,11,0.3)",
                               color: "#F59E0B", fontSize: 9, padding: "2px 7px", borderRadius: 3,
                               letterSpacing: "0.1em",
-                            }}>🎥 LOOM</span>
+                            }}>LOOM</span>
                           )}
                           {job.status === "draft" && (
                             <span style={{
@@ -426,22 +546,23 @@ export default function DashboardPage() {
                           {job.title}
                         </div>
 
-                        <div style={{ display: "flex", gap: 20, fontSize: 11, color: "#64748B", flexWrap: "wrap" }}>
-                          <span style={{ color: "#10B981", fontWeight: 700 }}>{job.budget}</span>
-                          <span>{job.type}</span>
-                          <span>· {job.proposals} proposals</span>
-                          <span>· {job.posted}</span>
-                          <span style={{ marginLeft: "auto" }}>
+                        <div style={{ display: "flex", gap: 20, fontSize: 11, color: "#94A3B8", flexWrap: "wrap" }}>
+                          <span style={{ color: "#10B981", fontWeight: 700, fontFamily: "var(--font-geist-mono), monospace", fontSize: 13 }}>{job.budget}</span>
+                          <span style={{ color: "#64748B" }}>{job.type}</span>
+                          <span style={{ color: job.proposals < 5 ? "#10B981" : job.proposals < 12 ? "#F59E0B" : "#EF4444", fontFamily: "var(--font-geist-mono), monospace" }}>· {job.proposals} props</span>
+                          <span style={{ color: "#64748B" }}>· {job.posted}</span>
+                          <span style={{ marginLeft: "auto", color: "#64748B" }}>
                             {job.client.rating}★ · {job.client.spent} spent
-                            {job.client.verified && <span style={{ color: "#3B82F6" }}> · ✓ verified</span>}
+                            {job.client.verified && <span style={{ color: "#3B82F6" }}> · verified</span>}
                           </span>
                         </div>
 
                         <div style={{ display: "flex", gap: 6, marginTop: 10, flexWrap: "wrap" }}>
                           {job.tags.map(t => (
                             <span key={t} style={{
-                              background: "rgba(30,41,59,0.8)", border: "1px solid #1E293B",
-                              color: "#94A3B8", fontSize: 10, padding: "2px 8px", borderRadius: 3,
+                              background: "rgba(30,41,59,0.8)", border: "1px solid #1E2D3D",
+                              color: "#64748B", fontSize: 10, padding: "2px 8px", borderRadius: 3,
+                              letterSpacing: "0.02em",
                             }}>{t}</span>
                           ))}
                         </div>
@@ -466,13 +587,15 @@ export default function DashboardPage() {
                             )}
 
                             <div style={{ display: "flex", gap: 8 }}>
-                              <button style={{
-                                background: "linear-gradient(135deg, #065F46, #047857)",
-                                border: "1px solid #10B981", color: "#10B981",
-                                padding: "8px 16px", borderRadius: 6, cursor: "pointer",
-                                fontSize: 11, fontFamily: "inherit", letterSpacing: "0.08em",
-                                flex: 1,
-                              }}>
+                              <button 
+                                onClick={() => setProposalModalOpen(true)}
+                                style={{
+                                  background: "linear-gradient(135deg, #065F46, #047857)",
+                                  border: "1px solid #10B981", color: "#10B981",
+                                  padding: "8px 16px", borderRadius: 6, cursor: "pointer",
+                                  fontSize: 11, fontFamily: "inherit", letterSpacing: "0.08em",
+                                  flex: 1,
+                                }}>
                                 OPEN PROPOSAL →
                               </button>
                               {job.loom && (
@@ -506,13 +629,13 @@ export default function DashboardPage() {
               background: "#0D1117", overflowY: "auto", padding: 20,
               flexShrink: 0,
             }}>
-              <div style={{ fontSize: 11, color: "#475569", letterSpacing: "0.1em", marginBottom: 16 }}>
+              <div style={{ fontSize: 11, color: "#64748B", letterSpacing: "0.1em", marginBottom: 16 }}>
                 PIPELINE
               </div>
-              {PIPELINE.map((stage, i) => (
+              {PIPELINE_SIDEBAR.map((stage, i) => (
                 <div key={i} style={{ marginBottom: 14 }}>
                   <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 6 }}>
-                    <span style={{ fontSize: 11, color: "#94A3B8" }}>{stage.stage}</span>
+                    <span style={{ fontSize: 11, color: "#CBD5E1" }}>{stage.stage}</span>
                     <span style={{ fontSize: 11, color: stage.color, fontWeight: 700 }}>{stage.count}</span>
                   </div>
                   <div style={{ height: 3, background: "#1E293B", borderRadius: 2, overflow: "hidden" }}>
@@ -522,13 +645,13 @@ export default function DashboardPage() {
                       background: stage.color, transition: "width 0.6s ease",
                     }} />
                   </div>
-                  <div style={{ fontSize: 10, color: "#334155", marginTop: 4 }}>{stage.value} value</div>
+                  <div style={{ fontSize: 10, color: "#4B5563", marginTop: 4 }}>{stage.value} value</div>
                 </div>
               ))}
 
               <div style={{ height: 1, background: "#1E293B", margin: "24px 0" }} />
 
-              <div style={{ fontSize: 11, color: "#475569", letterSpacing: "0.1em", marginBottom: 16 }}>
+              <div style={{ fontSize: 11, color: "#64748B", letterSpacing: "0.1em", marginBottom: 16 }}>
                 PLATFORM STATUS
               </div>
               {[
@@ -548,7 +671,7 @@ export default function DashboardPage() {
                       boxShadow: plat.status === "active" ? "0 0 6px #10B981" : "none",
                     }} />
                   </div>
-                  <div style={{ fontSize: 10, color: "#334155", marginTop: 4 }}>
+                  <div style={{ fontSize: 10, color: "#4B5563", marginTop: 4 }}>
                     {plat.status === "active" ? `Last: ${plat.last} · ${plat.jobs} jobs indexed` : "Not connected"}
                   </div>
                 </div>
@@ -556,7 +679,7 @@ export default function DashboardPage() {
 
               <div style={{ height: 1, background: "#1E293B", margin: "24px 0" }} />
 
-              <div style={{ fontSize: 11, color: "#475569", letterSpacing: "0.1em", marginBottom: 16 }}>
+              <div style={{ fontSize: 11, color: "#64748B", letterSpacing: "0.1em", marginBottom: 16 }}>
                 THIS WEEK
               </div>
               {[
@@ -570,7 +693,7 @@ export default function DashboardPage() {
                   padding: "7px 0", borderBottom: "1px solid #0F172A",
                 }}>
                   <span style={{ fontSize: 11, color: "#64748B" }}>{s.label}</span>
-                  <span style={{ fontSize: 11, color: "#F1F5F9", fontWeight: 700 }}>{s.val}</span>
+                  <span style={{ fontSize: 11, color: "#F1F5F9", fontWeight: 700, fontFamily: "var(--font-geist-mono), monospace" }}>{s.val}</span>
                 </div>
               ))}
             </div>
@@ -580,39 +703,26 @@ export default function DashboardPage() {
         {/* ── PIPELINE TAB ── */}
         {tab === "pipeline" && (
           <div style={{ flex: 1, overflowX: "auto", padding: 24 }}>
-            <div style={{ fontSize: 11, color: "#475569", letterSpacing: "0.1em", marginBottom: 20 }}>
+            <div style={{ fontSize: 11, color: "#64748B", letterSpacing: "0.1em", marginBottom: 20 }}>
               PIPELINE — ALL STAGES
             </div>
             <div style={{ display: "flex", gap: 12, minWidth: 900 }}>
-              {[
-                { stage: "Contacted", color: "#3B82F6", leads: [
-                  { name: "Taylor (FlowSaaS)", value: "$1,200", age: "2d", source: "Upwork" },
-                  { name: "Marcus (DevOps Co)", value: "$3,500", age: "4d", source: "LinkedIn" },
-                  { name: "Aisha (HealthTech)", value: "$2,200", age: "1d", source: "Upwork" },
-                  { name: "Chris (E-comm SaaS)", value: "$2,300", age: "3d", source: "Direct" },
-                ]},
-                { stage: "Engaged", color: "#8B5CF6", leads: [
-                  { name: "Sarah (NovaTech)", value: "$4,500", age: "6d", source: "LinkedIn" },
-                  { name: "Raj (FinFlow)", value: "$2,300", age: "8d", source: "Upwork" },
-                ]},
-                { stage: "Call Booked", color: "#F59E0B", leads: [
-                  { name: "Maya (FlowDesk)", value: "$4,500", age: "1d", source: "LinkedIn" },
-                ]},
-                { stage: "Negotiating", color: "#F97316", leads: [] },
-                { stage: "Won", color: "#10B981", leads: [
-                  { name: "Ben (CloudPulse)", value: "$1,200", age: "2d", source: "Upwork" },
-                  { name: "Lisa (RetailAI)", value: "$3,600", age: "5d", source: "Direct" },
-                  { name: "Tom (DevStream)", value: "$2,550", age: "8d", source: "Upwork" },
-                ]},
-              ].map((col, ci) => (
-                <div key={ci} style={{ flex: 1, minWidth: 180 }}>
+              {Object.entries(PIPELINE_COLORS).map(([key, color], ci) => {
+                const leads = (pipeline[key] || []) as Array<{id?: string; name: string; value: number; source: string; ageLabel?: string; createdAt?: string}>
+                const colLabel = key.replace('_', ' ').replace(/\b\w/g, c => c.toUpperCase())
+                const col = { stage: colLabel, color, leads }
+                return (
+                <div key={ci} style={{ flex: 1, minWidth: 180, display: "flex", flexDirection: "column" }}>
+                  {/* Column header */}
                   <div style={{
-                    display: "flex", justifyContent: "space-between", alignItems: "center",
-                    marginBottom: 10, padding: "8px 12px",
-                    background: "rgba(30,41,59,0.4)", borderRadius: 6,
-                    border: `1px solid ${col.color}30`,
+                    padding: "9px 12px", borderRadius: "8px 8px 0 0",
+                    background: `${col.color}08`,
+                    borderTop: `1px solid ${col.color}40`,
+                    borderRight: `1px solid ${col.color}30`,
+                    borderLeft: `1px solid ${col.color}30`,
+                    display: "flex", alignItems: "center", justifyContent: "space-between",
                   }}>
-                    <span style={{ fontSize: 10, color: col.color, letterSpacing: "0.1em", fontWeight: 700 }}>
+                    <span style={{ fontSize: 10, color: col.color, letterSpacing: "0.12em", fontWeight: 700 }}>
                       {col.stage.toUpperCase()}
                     </span>
                     <span style={{
@@ -622,31 +732,57 @@ export default function DashboardPage() {
                       fontSize: 10, fontWeight: 700,
                     }}>{col.leads.length}</span>
                   </div>
-                  <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-                    {col.leads.map((lead, li) => (
-                      <div key={li} style={{
-                        background: "#0D1117", border: "1px solid #1E293B",
-                        borderRadius: 6, padding: "10px 12px",
-                        borderLeft: `2px solid ${col.color}`,
-                      }}>
-                        <div style={{ fontSize: 12, color: "#E2E8F0", marginBottom: 6 }}>{lead.name}</div>
-                        <div style={{ display: "flex", justifyContent: "space-between" }}>
-                          <span style={{ fontSize: 10, color: col.color, fontWeight: 700 }}>{lead.value}</span>
-                          <span style={{ fontSize: 10, color: "#334155" }}>{lead.age} ago</span>
+                  {/* Cards area */}
+                  <div style={{
+                    flex: 1, display: "flex", flexDirection: "column", gap: 7,
+                    background: "#111827", padding: 10,
+                    borderLeft: `1px solid ${col.color}25`,
+                    borderRight: `1px solid ${col.color}25`,
+                    borderBottom: `1px solid ${col.color}25`,
+                    borderRadius: "0 0 8px 8px", minHeight: 80,
+                  }}>
+                    {col.leads.map((lead, li) => {
+                      const ageStr = lead.ageLabel || ''
+                      const ageDays = parseInt(ageStr)
+                      const ageColor = isNaN(ageDays) ? "#10B981" : ageDays <= 2 ? "#10B981" : ageDays <= 7 ? "#F59E0B" : "#EF4444"
+                      return (
+                        <div key={lead.id || li} style={{
+                          background: "#0D1117",
+                          borderTop: "1px solid #1E293B",
+                          borderRight: "1px solid #1E293B",
+                          borderBottom: "1px solid #1E293B",
+                          borderLeft: `3px solid ${col.color}`,
+                          borderRadius: 6, padding: "10px 12px",
+                        }}>
+                          <div style={{ fontSize: 12, color: "#E2E8F0", fontWeight: 600, marginBottom: 6 }}>{lead.name}</div>
+                          <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 5 }}>
+                            <span style={{ fontSize: 12, color: col.color, fontWeight: 700, fontFamily: "var(--font-geist-mono), monospace" }}>
+                              ${(lead.value || 0).toLocaleString()}
+                            </span>
+                            <span style={{ fontSize: 10, fontFamily: "var(--font-geist-mono), monospace", color: ageColor }}>
+                              {ageStr || '—'}
+                            </span>
+                          </div>
+                          <span style={{
+                            display: "inline-block", padding: "1px 7px", borderRadius: 3,
+                            fontSize: 9, fontWeight: 600, letterSpacing: "0.08em",
+                            color: "#4B5563", background: "rgba(30,41,59,0.5)", border: "1px solid #1E293B",
+                            textTransform: "uppercase",
+                          }}>{lead.source || 'manual'}</span>
                         </div>
-                        <div style={{ fontSize: 10, color: "#475569", marginTop: 4 }}>{lead.source}</div>
-                      </div>
-                    ))}
+                      )
+                    })}
                     {col.leads.length === 0 && (
                       <div style={{
-                        background: "rgba(30,41,59,0.2)", border: "1px dashed #1E293B",
-                        borderRadius: 6, padding: "20px 12px", textAlign: "center",
-                        fontSize: 10, color: "#334155",
-                      }}>empty</div>
+                        flex: 1, display: "flex", alignItems: "center", justifyContent: "center",
+                        border: "1px dashed #1E293B", borderRadius: 6, padding: "24px 12px",
+                        fontSize: 10, color: "#2D3748", letterSpacing: "0.06em",
+                      }}>EMPTY</div>
                     )}
                   </div>
                 </div>
-              ))}
+                )
+              })}
             </div>
           </div>
         )}
@@ -655,7 +791,7 @@ export default function DashboardPage() {
         {tab === "templates" && (
           <div style={{ flex: 1, overflowY: "auto", padding: 24, display: "flex", gap: 20 }}>
             <div style={{ width: 260, flexShrink: 0 }}>
-              <div style={{ fontSize: 11, color: "#475569", letterSpacing: "0.1em", marginBottom: 16 }}>
+              <div style={{ fontSize: 11, color: "#64748B", letterSpacing: "0.1em", marginBottom: 16 }}>
                 TEMPLATE LIBRARY
               </div>
               {[
@@ -676,7 +812,7 @@ export default function DashboardPage() {
                     <span style={{ fontSize: 11, color: i === 0 ? "#10B981" : "#64748B", fontWeight: 700 }}>{t.rate}</span>
                   </div>
                   <div style={{ fontSize: 12, color: "#E2E8F0" }}>{t.name}</div>
-                  <div style={{ fontSize: 10, color: "#334155", marginTop: 4 }}>{t.wins}W / {t.sent} sent</div>
+                  <div style={{ fontSize: 10, color: "#4B5563", marginTop: 4 }}>{t.wins}W / {t.sent} sent</div>
                 </div>
               ))}
             </div>
@@ -713,7 +849,7 @@ export default function DashboardPage() {
         {/* ── ANALYTICS TAB ── */}
         {tab === "analytics" && (
           <div style={{ flex: 1, overflowY: "auto", padding: 24 }}>
-            <div style={{ fontSize: 11, color: "#475569", letterSpacing: "0.1em", marginBottom: 24 }}>
+            <div style={{ fontSize: 11, color: "#64748B", letterSpacing: "0.1em", marginBottom: 24 }}>
               PERFORMANCE ANALYTICS — ROLLING 30 DAYS
             </div>
             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 16, marginBottom: 24 }}>
@@ -726,12 +862,19 @@ export default function DashboardPage() {
                 { label: "Skipped (low score)", value: "68%", sub: "of all jobs seen", good: false },
               ].map((m, i) => (
                 <div key={i} style={{
-                  background: "#0D1117", border: "1px solid #1E293B",
+                  background: "#0D1117",
+                  borderTop: `2px solid ${m.good ? "rgba(16,185,129,0.35)" : "rgba(100,116,139,0.25)"}`,
+                  borderRight: "1px solid #1E293B",
+                  borderBottom: "1px solid #1E293B",
+                  borderLeft: "1px solid #1E293B",
                   borderRadius: 8, padding: "18px 20px",
                 }}>
-                  <div style={{ fontSize: 11, color: "#475569", letterSpacing: "0.06em", marginBottom: 8 }}>{m.label}</div>
-                  <div style={{ fontSize: 28, color: "#F1F5F9", fontWeight: 700, letterSpacing: "-0.02em" }}>{m.value}</div>
-                  <div style={{ fontSize: 11, color: m.good ? "#10B981" : "#64748B", marginTop: 6 }}>
+                  <div style={{ fontSize: 11, color: "#64748B", letterSpacing: "0.06em", marginBottom: 10 }}>{m.label}</div>
+                  <div style={{
+                    fontSize: 28, color: "#F1F5F9", fontWeight: 700, letterSpacing: "-0.02em",
+                    fontFamily: "var(--font-geist-mono), monospace",
+                  }}>{m.value}</div>
+                  <div style={{ fontSize: 11, color: m.good ? "#10B981" : "#64748B", marginTop: 8 }}>
                     {m.trend || m.sub}
                   </div>
                 </div>
@@ -740,7 +883,7 @@ export default function DashboardPage() {
 
             {/* Win rate by category */}
             <div style={{ background: "#0D1117", border: "1px solid #1E293B", borderRadius: 8, padding: "20px 24px" }}>
-              <div style={{ fontSize: 11, color: "#475569", letterSpacing: "0.1em", marginBottom: 20 }}>
+              <div style={{ fontSize: 11, color: "#64748B", letterSpacing: "0.1em", marginBottom: 20 }}>
                 WIN RATE BY CATEGORY
               </div>
               {[
@@ -765,10 +908,10 @@ export default function DashboardPage() {
                       transition: "width 0.8s ease",
                     }} />
                   </div>
-                  <div style={{ width: 40, fontSize: 12, color: SCORE_COLOR(row.rate + 60), fontWeight: 700, textAlign: "right" }}>
+                  <div style={{ width: 44, fontSize: 12, color: SCORE_COLOR(row.rate + 60), fontWeight: 700, textAlign: "right", fontFamily: "var(--font-geist-mono), monospace" }}>
                     {row.rate}%
                   </div>
-                  <div style={{ width: 80, fontSize: 10, color: "#334155", textAlign: "right" }}>
+                  <div style={{ width: 80, fontSize: 10, color: "#4B5563", textAlign: "right", fontFamily: "var(--font-geist-mono), monospace" }}>
                     {row.wins}W / {row.sent}
                   </div>
                 </div>
@@ -781,20 +924,21 @@ export default function DashboardPage() {
       <style>{`
         @keyframes ping {
           0%, 100% { opacity: 1; transform: scale(1); }
-          50% { opacity: 0.6; transform: scale(1.4); }
+          50%       { opacity: 0.6; transform: scale(1.4); }
         }
-        @keyframes gridMove {
-          0% { transform: translate(0, 0); }
-          100% { transform: translate(50px, 50px); }
-        }
-        @keyframes float {
-          0%, 100% { transform: translateY(0px) rotate(0deg); }
-          50% { transform: translateY(-10px) rotate(180deg); }
-        }
+        @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
         ::-webkit-scrollbar { width: 4px; height: 4px; }
         ::-webkit-scrollbar-track { background: #080C14; }
         ::-webkit-scrollbar-thumb { background: #1E293B; border-radius: 2px; }
+        ::-webkit-scrollbar-thumb:hover { background: #2D3748; }
       `}</style>
+
+      {/* Proposal Modal */}
+      <ProposalModal
+        isOpen={proposalModalOpen}
+        onClose={() => setProposalModalOpen(false)}
+        job={selected}
+      />
     </div>
   )
 }

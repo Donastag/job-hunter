@@ -1,13 +1,10 @@
-// This is your Prisma schema file,
-// learn more about it in the docs: https://pris.ly/d/prisma-schema
-
 generator client {
   provider = "prisma-client-js"
 }
 
 datasource db {
-  provider = "sqlite"
-  url      = "file:./dev.db"
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
 }
 
 model User {
@@ -60,32 +57,32 @@ model VerificationToken {
 }
 
 model Job {
-  id              String   @id @default(cuid())
-  platform        String   // upwork, linkedin, contra, toptal, manual
+  id             String    @id @default(cuid())
+  platform       String
   externalId     String?
-  title           String
-  description     String?
-  budget          String?
-  type            String?  // fixed, hourly
-  skills          String   // JSON string array
-  clientName      String?
-  clientRating    Float?
-  clientSpent     String?
+  title          String
+  description    String?
+  budget         String?
+  type           String?
+  skills         String
+  clientName     String?
+  clientRating   Float?
+  clientSpent    String?
   clientHired    Int?
-  clientVerified Boolean  @default(false)
-  proposals      Int      @default(0)
-  score          Int      @default(0)
-  tier           String   @default("normal") // priority, alert, normal
-  status         String   @default("new") // new, draft, applied, archived
+  clientVerified Boolean   @default(false)
+  proposals      Int       @default(0)
+  score          Int       @default(0)
+  tier           String    @default("normal")
+  status         String    @default("new")
   postedAt       DateTime?
   url            String?
-  fetchedAt      DateTime @default(now())
-  brief          String?  // AI-generated brief
-  loom           Boolean  @default(false)
+  fetchedAt      DateTime  @default(now())
+  brief          String?
+  loom           Boolean   @default(false)
   userId         String?
-  user           User?    @relation(fields: [userId], references: [id])
-  createdAt      DateTime @default(now())
-  updatedAt      DateTime @updatedAt
+  user           User?     @relation(fields: [userId], references: [id])
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
 }
 
 model Lead {
@@ -93,10 +90,10 @@ model Lead {
   name      String
   email     String?
   company   String?
-  source    String   // upwork, linkedin, contra, toptal, direct, manual
+  source    String
   value     Float    @default(0)
-  stage     String   @default("contacted") // contacted, engaged, call_booked, negotiating, won
-  age       Int      @default(0) // days in current stage
+  stage     String   @default("contacted")
+  age       Int      @default(0)
   notes     String?
   userId    String?
   user      User?    @relation(fields: [userId], references: [id])
@@ -105,17 +102,17 @@ model Lead {
 }
 
 model Template {
-  id         String   @id @default(cuid())
-  name       String
-  category   String
-  content    String
-  variables  String   // JSON string array
-  wins       Int      @default(0)
-  sent       Int      @default(0)
-  userId     String?
-  user       User?    @relation(fields: [userId], references: [id])
-  createdAt  DateTime @default(now())
-  updatedAt  DateTime @updatedAt
+  id        String   @id @default(cuid())
+  name      String
+  category  String
+  content   String
+  variables String
+  wins      Int      @default(0)
+  sent      Int      @default(0)
+  userId    String?
+  user      User?    @relation(fields: [userId], references: [id])
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 }
 
 model Analytics {
@@ -132,10 +129,38 @@ model Analytics {
 
 model Alert {
   id        String   @id @default(cuid())
-  type      String   // priority, alert, signal, win
+  type      String
   message   String
-  time      String   // "4m", "2h", etc.
+  time      String
   read      Boolean  @default(false)
   userId    String?
   createdAt DateTime @default(now())
+}
+
+model Invoice {
+  id          String   @id @default(cuid())
+  clientName  String
+  clientEmail String?
+  description String?
+  amount      Float    @default(0)
+  status      String   @default("draft")
+  dueDate     DateTime?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@map("invoices")
+}
+
+model Client {
+  id        String   @id @default(cuid())
+  name      String
+  email     String?
+  company   String?
+  phone     String?
+  source    String   @default("manual")
+  notes     String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("clients")
 }

@@ -1,28 +1,5 @@
 services:
 
-  # ── Traefik reverse proxy ────────────────────────────────────────────────
-  traefik:
-    image: traefik:v3.1
-    container_name: nexara-traefik
-    restart: unless-stopped
-    command:
-      - --api.dashboard=true
-      - --api.insecure=true
-      - --providers.docker=true
-      - --providers.docker.exposedbydefault=false
-      - --entrypoints.web.address=:80
-      - --entrypoints.websecure.address=:443
-      - --log.level=WARN
-    ports:
-      - "80:80"
-      - "443:443"
-      - "127.0.0.1:8080:8080"
-    volumes:
-      - /var/run/docker.sock:/var/run/docker.sock:ro
-      - traefik-certs:/certs
-    networks:
-      - nexara
-
   # ── PostgreSQL ───────────────────────────────────────────────────────────
   postgres:
     image: postgres:16-alpine
@@ -54,18 +31,15 @@ services:
         condition: service_healthy
     environment:
       NODE_ENV:           production
-      DATABASE_URL:       postgresql://${POSTGRES_USER:-nexara}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-nexara}
+      DATABASE_URL:       ${DATABASE_URL}
       NEXTAUTH_URL:       ${NEXTAUTH_URL}
       NEXTAUTH_SECRET:    ${NEXTAUTH_SECRET}
       TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN}
       TELEGRAM_CHAT_ID:   ${TELEGRAM_CHAT_ID}
       OPENROUTER_API_KEY: ${OPENROUTER_API_KEY}
       PIPELINE_CRON:      ${PIPELINE_CRON:-*/30 * * * *}
-    labels:
-      - traefik.enable=true
-      - traefik.http.routers.job-hunter.rule=PathPrefix(`/`)
-      - traefik.http.routers.job-hunter.entrypoints=web
-      - traefik.http.services.job-hunter.loadbalancer.server.port=3000
+    ports:
+      - "80:3000"
     networks:
       - nexara
 
@@ -81,18 +55,15 @@ services:
         condition: service_healthy
     environment:
       NODE_ENV:     production
-      DATABASE_URL: postgresql://${POSTGRES_USER:-nexara}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-nexara}
+      DATABASE_URL: ${DATABASE_URL}
       PORT:         4200
     ports:
       - "${TAILSCALE_IP}:4200:4200"
     networks:
       - nexara
-    labels:
-      - traefik.enable=false
 
 volumes:
   postgres-data:
-  traefik-certs:
 
 networks:
   nexara:

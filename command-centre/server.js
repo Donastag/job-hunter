@@ -13,6 +13,8 @@ app.use('/', require('./routes/hunt'))
 app.use('/pipeline', require('./routes/pipeline'))
 app.use('/finance', require('./routes/finance'))
 app.use('/clients', require('./routes/clients'))
+app.use('/knowledge', require('./routes/knowledge'))
+app.use('/portfolio', require('./routes/portfolio'))
 app.use('/api', require('./routes/api'))
 
 app.listen(PORT, () => {

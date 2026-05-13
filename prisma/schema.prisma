@@ -164,3 +164,33 @@ model Client {
 
   @@map("clients")
 }
+
+model KnowledgeEntry {
+  id        String   @id @default(cuid())
+  title     String
+  category  String   @default("general")
+  tags      String   @default("")
+  content   String
+  source    String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("knowledge_entries")
+}
+
+model PortfolioItem {
+  id          String    @id @default(cuid())
+  title       String
+  client      String?
+  techStack   String    @default("")
+  outcome     String?
+  revenue     Float     @default(0)
+  testimonial String?
+  url         String?
+  status      String    @default("active")
+  completedAt DateTime?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  @@map("portfolio_items")
+}

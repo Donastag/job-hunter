@@ -1,0 +1,264 @@
+<%- include('partials/head', { title }) %>
+<%- include('partials/nav', { active }) %>
+
+<div class="px-6 py-5 max-w-6xl mx-auto">
+
+  <!-- Stats bar -->
+  <div class="grid grid-cols-5 gap-3 mb-6">
+    <div style="background:var(--surface);border:1px solid var(--border);border-radius:var(--r-lg);padding:14px 16px;">
+      <div class="mono text-2xl font-bold" style="color:var(--text);"><%= stats.total %></div>
+      <div style="font-size:9px;font-weight:700;letter-spacing:.12em;color:var(--text-3);margin-top:3px;">TOTAL PROJECTS</div>
+    </div>
+    <div style="background:var(--surface);border:1px solid var(--border);border-radius:var(--r-lg);padding:14px 16px;">
+      <div class="mono text-2xl font-bold" style="color:var(--green);"><%= stats.active %></div>
+      <div style="font-size:9px;font-weight:700;letter-spacing:.12em;color:var(--text-3);margin-top:3px;">ACTIVE</div>
+    </div>
+    <div style="background:var(--surface);border:1px solid var(--border);border-radius:var(--r-lg);padding:14px 16px;">
+      <div class="mono text-2xl font-bold" style="color:var(--text-3);"><%= stats.archived %></div>
+      <div style="font-size:9px;font-weight:700;letter-spacing:.12em;color:var(--text-3);margin-top:3px;">ARCHIVED</div>
+    </div>
+    <div style="background:var(--surface);border:1px solid var(--border);border-radius:var(--r-lg);padding:14px 16px;">
+      <div class="mono text-2xl font-bold" style="color:var(--green);">$<%= fmtKES(stats.totalRevenue) %></div>
+      <div style="font-size:9px;font-weight:700;letter-spacing:.12em;color:var(--text-3);margin-top:3px;">TOTAL REVENUE</div>
+    </div>
+    <div style="background:var(--surface);border:1px solid var(--border);border-radius:var(--r-lg);padding:14px 16px;">
+      <div class="mono text-2xl font-bold" style="color:var(--blue);">$<%= fmtKES(stats.avgRevenue) %></div>
+      <div style="font-size:9px;font-weight:700;letter-spacing:.12em;color:var(--text-3);margin-top:3px;">AVG DEAL</div>
+    </div>
+  </div>
+
+  <!-- Toolbar -->
+  <div class="flex items-center justify-between mb-4">
+    <div class="flex gap-1">
+      <% ['active','all','archived'].forEach(f => { %>
+      <a href="/portfolio?status=<%= f %>"
+         class="ftab <%= activeFilter === f ? 'on' : '' %>"><%= f.toUpperCase() %></a>
+      <% }) %>
+    </div>
+    <button class="btn btn-primary" onclick="openAdd()">+ ADD PROJECT</button>
+  </div>
+
+  <!-- Projects grid -->
+  <% if (items.length === 0) { %>
+  <div style="text-align:center;padding:64px 0;color:var(--text-3);">
+    <div style="font-size:32px;margin-bottom:12px;">🏗️</div>
+    <div style="font-size:13px;">No projects yet. Add your first completed build.</div>
+  </div>
+  <% } else { %>
+  <div class="grid grid-cols-2 gap-3">
+    <% items.forEach(item => { %>
+    <div style="background:var(--surface);border:1px solid var(--border);border-radius:var(--r-lg);padding:20px;transition:all 150ms;"
+         onmouseenter="this.style.borderColor='var(--surface-3)';this.style.background='var(--surface-2)'"
+         onmouseleave="this.style.borderColor='var(--border)';this.style.background='var(--surface)'">
+
+      <!-- Header row -->
+      <div class="flex items-start justify-between gap-3 mb-3">
+        <div class="flex-1 min-w-0">
+          <div style="font-size:15px;font-weight:700;color:var(--text);margin-bottom:2px;"><%= item.title %></div>
+          <% if (item.client) { %>
+          <div style="font-size:11px;color:var(--text-3);">@ <%= item.client %></div>
+          <% } %>
+        </div>
+        <div class="flex flex-col items-end gap-1 flex-shrink-0">
+          <% if (item.revenue > 0) { %>
+          <div class="mono" style="font-size:14px;font-weight:700;color:var(--green);">$<%= fmtKES(item.revenue) %></div>
+          <% } %>
+          <span class="pill <%= item.status === 'active' ? 'pill-priority' : 'pill-archived' %>">
+            <%= item.status.toUpperCase() %>
+          </span>
+        </div>
+      </div>
+
+      <!-- Tech stack -->
+      <% if (item.techStack) { %>
+      <div class="flex flex-wrap gap-1 mb-3">
+        <% item.techStack.split(',').map(t=>t.trim()).filter(Boolean).forEach(tech => { %>
+        <span class="platform-tag"><%= tech %></span>
+        <% }) %>
+      </div>
+      <% } %>
+
+      <!-- Outcome -->
+      <% if (item.outcome) { %>
+      <div style="font-size:12px;color:var(--text-2);line-height:1.5;margin-bottom:10px;"><%= item.outcome %></div>
+      <% } %>
+
+      <!-- Testimonial -->
+      <% if (item.testimonial) { %>
+      <div style="font-size:11px;color:var(--text-3);font-style:italic;border-left:2px solid var(--green-ring);padding-left:10px;margin-bottom:10px;line-height:1.5;">
+        "<%= item.testimonial %>"
+      </div>
+      <% } %>
+
+      <!-- Footer row -->
+      <div class="flex items-center justify-between" style="margin-top:auto;">
+        <div class="flex items-center gap-3">
+          <% if (item.completedAt) { %>
+          <span style="font-size:10px;color:var(--text-3);">
+            <%= new Date(item.completedAt).toLocaleDateString('en-GB',{month:'short',year:'numeric'}) %>
+          </span>
+          <% } %>
+          <% if (item.url) { %>
+          <a href="<%= item.url %>" target="_blank" style="font-size:10px;color:var(--blue);text-decoration:none;">↗ VIEW</a>
+          <% } %>
+        </div>
+        <div class="flex gap-1">
+          <button class="btn btn-ghost" style="padding:3px 9px;font-size:10px;"
+            onclick="openEdit(<%- JSON.stringify(item) %>)">EDIT</button>
+          <button class="btn btn-ghost" style="padding:3px 9px;font-size:10px;color:var(--red);"
+            onclick="deleteItem('<%= item.id %>')">DEL</button>
+        </div>
+      </div>
+    </div>
+    <% }) %>
+  </div>
+  <% } %>
+</div>
+
+<!-- Add / Edit Modal -->
+<div id="modal" class="modal-backdrop">
+  <div class="modal-box" style="width:540px;max-height:90vh;overflow-y:auto;">
+    <div class="flex items-center justify-between mb-5">
+      <h2 id="modal-title" style="font-size:13px;font-weight:700;letter-spacing:.1em;color:var(--text);">ADD PROJECT</h2>
+      <button onclick="closeModal()" style="color:var(--text-3);font-size:18px;cursor:pointer;line-height:1;">×</button>
+    </div>
+    <form id="item-form" class="flex flex-col gap-3">
+      <input type="hidden" id="item-id">
+      <div>
+        <label class="lbl">PROJECT TITLE *</label>
+        <input class="field" id="f-title" placeholder="e.g. Automation Dashboard for Acme" required>
+      </div>
+      <div class="grid grid-cols-2 gap-3">
+        <div>
+          <label class="lbl">CLIENT</label>
+          <input class="field" id="f-client" placeholder="Client name or 'Anonymous'">
+        </div>
+        <div>
+          <label class="lbl">REVENUE (USD)</label>
+          <input class="field" id="f-revenue" type="number" min="0" step="0.01" placeholder="0">
+        </div>
+      </div>
+      <div>
+        <label class="lbl">TECH STACK (comma-separated)</label>
+        <input class="field" id="f-tech" placeholder="e.g. Next.js, Python, n8n, PostgreSQL">
+      </div>
+      <div>
+        <label class="lbl">OUTCOME</label>
+        <textarea class="field" id="f-outcome" rows="3" placeholder="What was built and achieved..." style="resize:vertical;"></textarea>
+      </div>
+      <div>
+        <label class="lbl">CLIENT TESTIMONIAL</label>
+        <textarea class="field" id="f-testimonial" rows="2" placeholder="Quote from client..." style="resize:vertical;"></textarea>
+      </div>
+      <div class="grid grid-cols-2 gap-3">
+        <div>
+          <label class="lbl">PROJECT URL</label>
+          <input class="field" id="f-url" placeholder="https://...">
+        </div>
+        <div>
+          <label class="lbl">COMPLETED DATE</label>
+          <input class="field" id="f-completed" type="date">
+        </div>
+      </div>
+      <div id="status-row" style="display:none;">
+        <label class="lbl">STATUS</label>
+        <select class="field" id="f-status">
+          <option value="active">Active</option>
+          <option value="archived">Archived</option>
+        </select>
+      </div>
+      <div class="flex gap-2 pt-1">
+        <button type="submit" id="save-btn" class="btn btn-primary flex-1">SAVE</button>
+        <button type="button" onclick="closeModal()" class="btn btn-ghost">CANCEL</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<div id="toast"></div>
+
+<script>
+let editMode = false
+
+function toast(msg, ok=true) {
+  const t = document.getElementById('toast')
+  t.textContent = msg
+  t.className = 'show ' + (ok ? 't-ok' : 't-err')
+  setTimeout(() => t.className = '', 2800)
+}
+
+function openAdd() {
+  editMode = false
+  document.getElementById('modal-title').textContent = 'ADD PROJECT'
+  document.getElementById('save-btn').textContent = 'SAVE'
+  document.getElementById('item-id').value = ''
+  document.getElementById('item-form').reset()
+  document.getElementById('status-row').style.display = 'none'
+  document.getElementById('modal').classList.add('open')
+  document.getElementById('f-title').focus()
+}
+
+function openEdit(item) {
+  editMode = true
+  document.getElementById('modal-title').textContent = 'EDIT PROJECT'
+  document.getElementById('save-btn').textContent = 'UPDATE'
+  document.getElementById('item-id').value = item.id
+  document.getElementById('f-title').value = item.title
+  document.getElementById('f-client').value = item.client || ''
+  document.getElementById('f-revenue').value = item.revenue || ''
+  document.getElementById('f-tech').value = item.techStack || ''
+  document.getElementById('f-outcome').value = item.outcome || ''
+  document.getElementById('f-testimonial').value = item.testimonial || ''
+  document.getElementById('f-url').value = item.url || ''
+  document.getElementById('f-completed').value = item.completedAt ? item.completedAt.slice(0,10) : ''
+  document.getElementById('f-status').value = item.status || 'active'
+  document.getElementById('status-row').style.display = 'block'
+  document.getElementById('modal').classList.add('open')
+}
+
+function closeModal() {
+  document.getElementById('modal').classList.remove('open')
+}
+
+document.getElementById('item-form').addEventListener('submit', async e => {
+  e.preventDefault()
+  const id = document.getElementById('item-id').value
+  const body = {
+    title:       document.getElementById('f-title').value,
+    client:      document.getElementById('f-client').value,
+    revenue:     document.getElementById('f-revenue').value,
+    techStack:   document.getElementById('f-tech').value,
+    outcome:     document.getElementById('f-outcome').value,
+    testimonial: document.getElementById('f-testimonial').value,
+    url:         document.getElementById('f-url').value,
+    completedAt: document.getElementById('f-completed').value || null,
+    status:      document.getElementById('f-status').value,
+  }
+  const btn = document.getElementById('save-btn')
+  btn.disabled = true; btn.textContent = '...'
+
+  const url    = editMode ? `/portfolio/${id}` : '/portfolio'
+  const method = editMode ? 'PUT' : 'POST'
+
+  const r = await fetch(url, { method, headers: {'Content-Type':'application/json'}, body: JSON.stringify(body) })
+  const d = await r.json()
+  btn.disabled = false
+
+  if (d.ok) { toast(editMode ? 'Updated' : 'Project saved'); closeModal(); location.reload() }
+  else       { toast(d.error || 'Error', false); btn.textContent = editMode ? 'UPDATE' : 'SAVE' }
+})
+
+async function deleteItem(id) {
+  if (!confirm('Delete this project?')) return
+  const r = await fetch(`/portfolio/${id}`, { method: 'DELETE' })
+  const d = await r.json()
+  if (d.ok) { toast('Deleted'); location.reload() }
+  else toast(d.error || 'Error', false)
+}
+
+document.getElementById('modal').addEventListener('click', e => {
+  if (e.target === document.getElementById('modal')) closeModal()
+})
+</script>
+
+</body></html>

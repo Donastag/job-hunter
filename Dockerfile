@@ -2,7 +2,6 @@
 FROM node:20-alpine AS builder
 WORKDIR /app
 
-# OpenSSL 1.1 needed by Prisma engine on Alpine
 RUN apk add --no-cache openssl openssl-dev
 
 COPY package.json package-lock.json ./
@@ -16,7 +15,6 @@ FROM node:20-alpine AS runner
 WORKDIR /app
 ENV NODE_ENV=production
 
-# OpenSSL 1.1 needed by Prisma engine at runtime
 RUN apk add --no-cache openssl
 
 RUN addgroup --system --gid 1001 nodejs && \
@@ -31,12 +29,12 @@ COPY --from=builder /app/public ./public
 COPY --from=builder /app/node_modules/.prisma ./node_modules/.prisma
 COPY --from=builder /app/node_modules/@prisma ./node_modules/@prisma
 
-# Prisma CLI (v5) for migrate deploy
-COPY --from=builder /app/node_modules/prisma ./node_modules/prisma
-COPY --from=builder /app/node_modules/.bin/prisma ./node_modules/.bin/prisma
-
 # Schema + migrations
 COPY --from=builder /app/prisma ./prisma
+
+# Install Prisma CLI (pinned version, needed for migrate deploy)
+COPY --from=builder /app/package.json ./
+RUN npm install prisma@5.22.0 --no-save --ignore-scripts
 
 COPY docker-entrypoint.sh ./
 RUN chmod +x docker-entrypoint.sh

@@ -1,38 +1,43 @@
-# ── Stage 1: deps ────────────────────────────────────────────────────────────
-FROM node:20-alpine AS deps
-WORKDIR /app
-COPY package.json package-lock.json ./
-RUN npm ci --omit=dev
-
-# ── Stage 2: builder ─────────────────────────────────────────────────────────
+# ── Stage 1: builder ─────────────────────────────────────────────────────────
 FROM node:20-alpine AS builder
 WORKDIR /app
+
+# OpenSSL 1.1 needed by Prisma engine on Alpine
+RUN apk add --no-cache openssl openssl-dev
+
 COPY package.json package-lock.json ./
 RUN npm ci
 COPY . .
-# Generate Prisma client for production
 RUN npx prisma generate
-# Build Next.js
 RUN npm run build
 
-# ── Stage 3: runner ──────────────────────────────────────────────────────────
+# ── Stage 2: runner ──────────────────────────────────────────────────────────
 FROM node:20-alpine AS runner
 WORKDIR /app
 ENV NODE_ENV=production
 
+# OpenSSL 1.1 needed by Prisma engine at runtime
+RUN apk add --no-cache openssl
+
 RUN addgroup --system --gid 1001 nodejs && \
     adduser  --system --uid 1001 nextjs
 
-# Copy built output
+# Next.js standalone output
 COPY --from=builder /app/.next/standalone ./
 COPY --from=builder /app/.next/static ./.next/static
 COPY --from=builder /app/public ./public
-# Prisma client + schema (needed at runtime for migrations)
+
+# Prisma client (runtime query engine)
 COPY --from=builder /app/node_modules/.prisma ./node_modules/.prisma
 COPY --from=builder /app/node_modules/@prisma ./node_modules/@prisma
+
+# Prisma CLI (v5) for migrate deploy
+COPY --from=builder /app/node_modules/prisma ./node_modules/prisma
+COPY --from=builder /app/node_modules/.bin/prisma ./node_modules/.bin/prisma
+
+# Schema + migrations
 COPY --from=builder /app/prisma ./prisma
 
-# Entrypoint: run migrations then start
 COPY docker-entrypoint.sh ./
 RUN chmod +x docker-entrypoint.sh
 

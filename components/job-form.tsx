@@ -47,7 +47,7 @@ export default function JobForm({ isOpen, onClose, onSuccess }: JobFormProps) {
         onSuccess(newJob)
         
         // Send notification to Telegram
-        await telegramBot.sendJobNotification(newJob, formData.status)
+        await telegramBot.sendJobNotification(newJob, formData.status as "applied" | "interview" | "offer" | "rejected")
         
         // Reset form
         setFormData({

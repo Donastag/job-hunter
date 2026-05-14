@@ -1,20 +1,36 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useCallback } from 'react'
 import { authClient } from '@/lib/auth-client'
-import { 
-  Home, 
-  Briefcase, 
-  Users, 
-  Settings, 
-  Menu, 
+import { useIdleTimeout } from '@/hooks/use-idle-timeout'
+import {
+  Home,
+  Briefcase,
+  Users,
+  Settings,
+  Menu,
   X,
-  LogOut 
+  LogOut
 } from 'lucide-react'
 
 export function DashboardLayout({ children }: { children: React.ReactNode }) {
   const { data: session } = authClient.useSession()
   const [sidebarOpen, setSidebarOpen] = useState(false)
+  const [warnSeconds, setWarnSeconds] = useState<number | null>(null)
+
+  const handleIdle = useCallback(() => {
+    authClient.signOut({ fetchOptions: { onSuccess: () => { window.location.href = '/auth/signin' } } })
+  }, [])
+
+  const handleWarn = useCallback((secs: number) => {
+    setWarnSeconds(secs)
+  }, [])
+
+  const handleActivity = useCallback(() => {
+    setWarnSeconds(null)
+  }, [])
+
+  useIdleTimeout(handleIdle, handleWarn, handleActivity)
 
   const navigation = [
     { name: 'Dashboard', href: '/dashboard', icon: Home },
@@ -25,6 +41,13 @@ export function DashboardLayout({ children }: { children: React.ReactNode }) {
 
   return (
     <div className="min-h-screen bg-gray-50">
+      {/* Idle warning banner */}
+      {warnSeconds !== null && (
+        <div className="fixed top-0 inset-x-0 z-50 bg-amber-500 text-white text-sm font-medium text-center py-2 shadow-lg">
+          Session expiring in {warnSeconds}s due to inactivity — move your mouse to stay signed in.
+        </div>
+      )}
+
       {/* Mobile sidebar */}
       <div className={`fixed inset-0 z-40 md:hidden ${sidebarOpen ? 'block' : 'hidden'}`}>
         <div className="fixed inset-0 bg-gray-600 opacity-75" onClick={() => setSidebarOpen(false)}></div>

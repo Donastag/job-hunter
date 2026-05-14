@@ -57,7 +57,7 @@ async function setupProductionDatabase() {
     console.log('1. Run `npx prisma migrate deploy` to apply migrations')
     console.log('2. Set environment variables in Vercel dashboard:')
     console.log('   - DATABASE_URL (your PostgreSQL connection string)')
-    console.log('   - NEXTAUTH_SECRET (generate a secure secret)')
+    console.log('   - BETTER_AUTH_SECRET (generate a secure secret)')
     console.log('   - GITHUB_ID and GITHUB_SECRET (for OAuth)')
     console.log('   - GOOGLE_ID and GOOGLE_SECRET (for OAuth)')
     console.log('3. Redeploy to Vercel')

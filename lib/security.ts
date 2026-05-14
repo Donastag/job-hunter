@@ -162,12 +162,12 @@ export class EnvironmentValidator {
   static validateRequiredEnvVars(): void {
     const requiredVars = [
       'DATABASE_URL',
-      'NEXTAUTH_SECRET',
-      'NEXTAUTH_URL'
+      'BETTER_AUTH_SECRET',
+      'BETTER_AUTH_URL'
     ]
 
     const missingVars = requiredVars.filter(varName => !process.env[varName])
-    
+
     if (missingVars.length > 0) {
       throw new Error(`Missing required environment variables: ${missingVars.join(', ')}`)
     }
@@ -177,9 +177,9 @@ export class EnvironmentValidator {
       throw new Error('Invalid DATABASE_URL format')
     }
 
-    // Validate NextAuth secret strength
-    if (process.env.NEXTAUTH_SECRET && process.env.NEXTAUTH_SECRET.length < 32) {
-      console.warn('[SECURITY] NEXTAUTH_SECRET should be at least 32 characters long')
+    // Validate Better Auth secret strength
+    if (process.env.BETTER_AUTH_SECRET && process.env.BETTER_AUTH_SECRET.length < 32) {
+      console.warn('[SECURITY] BETTER_AUTH_SECRET should be at least 32 characters long')
     }
   }
 

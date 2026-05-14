@@ -329,8 +329,36 @@ coolify-redis      Up  internal
 - Prisma client regenerated ✅
 - Committed: `ac03b6c`
 
-### Remaining for Google OAuth to work
-1. Create OAuth client at console.cloud.google.com → APIs → Credentials → OAuth 2.0 Client ID
-2. Authorised redirect URI: `http://194.163.161.220/api/auth/callback/google`
-3. Add `GOOGLE_CLIENT_ID` + `GOOGLE_CLIENT_SECRET` to Coolify env vars (update NEXTAUTH_URL → BETTER_AUTH_URL there too)
-4. Run migration on VPS: `docker exec nexara-job-hunter npx prisma migrate deploy`
+#### Switched to Better Auth email/password (no Google OAuth)
+- `lib/auth.ts` — removed `socialProviders`, enabled `emailAndPassword: { enabled: true }`
+- `app/auth/signin/page.tsx` — rewritten: email + password form
+- `app/auth/signup/page.tsx` — new registration page
+- `app/page.tsx` — Sign In + Create Account buttons (no Google)
+- Removed `GOOGLE_CLIENT_ID`/`GOOGLE_CLIENT_SECRET` from all env files
+- Committed: `3f9d1e8`
+
+#### Port changed: 80 → 3000
+- Coolify activated its Traefik proxy (`coolify-proxy`) which claimed port 80
+- `docker-compose.yml` — changed `"80:3000"` → `"3000:3000"`, swapped `NEXTAUTH_*` → `BETTER_AUTH_*`
+- `BETTER_AUTH_URL` in Coolify updated to `http://194.163.161.220:3000`
+- Committed: `455da7d`, pushed, redeployed via Coolify
+- Old manually-started containers (`nexara-job-hunter`, `nexara-postgres`, `nexara-command-centre`) removed
+
+### Current Stack on VPS
+```
+coolify-proxy        Up  :80/:443/:8080  (Traefik — for future domain/HTTPS)
+coolify              Up  :8000           (management UI)
+job-hunter           Up  :3000           → http://194.163.161.220:3000
+command-centre       Up  :4200           (Tailscale only)
+postgres             Up  internal        (healthy)
+```
+
+### Access URLs
+- **Job Hunter:** http://194.163.161.220:3000
+- **Coolify UI:** http://194.163.161.220:8000
+- **Command Centre:** http://100.119.35.90:4200 (Tailscale only)
+
+### Remaining
+- [ ] Register at http://194.163.161.220:3000/auth/signup to create your account
+- [ ] Domain — point A record to VPS → configure Traefik labels in docker-compose → HTTPS auto
+- [ ] Apify Upwork scraper — `lib/platforms/upwork.ts`, add `APIFY_TOKEN` + `APIFY_UPWORK_ACTOR_ID`

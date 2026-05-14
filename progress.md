@@ -358,7 +358,62 @@ postgres             Up  internal        (healthy)
 - **Coolify UI:** http://194.163.161.220:8000
 - **Command Centre:** http://100.119.35.90:4200 (Tailscale only)
 
-### Remaining
-- [ ] Register at http://194.163.161.220:3000/auth/signup to create your account
-- [ ] Domain — point A record to VPS → configure Traefik labels in docker-compose → HTTPS auto
+### Done This Session
+- [x] Account created: danstedstagy@gmail.com / Nx2026!jobs
+- [x] Auth middleware — unauthenticated users redirected to /auth/signin
+- [x] Idle timeout — 30 min inactivity → auto sign-out + 60s amber warning banner
+- [x] Input text colour fix — text-gray-900 bg-white on all auth form inputs
+- [x] Security validator fixed — NEXTAUTH_* → BETTER_AUTH_*
+
+### Non-blocking Remaining
+- [ ] Domain — point A record to VPS → configure Traefik labels → HTTPS auto
 - [ ] Apify Upwork scraper — `lib/platforms/upwork.ts`, add `APIFY_TOKEN` + `APIFY_UPWORK_ACTOR_ID`
+
+---
+
+## ⏭ NEXT SESSION — Agent Pipeline (Phase 1 → 3)
+
+> **Goal:** Close the automation loop from proposal draft → apply → reply → win → invoice → analytics
+
+### What already works
+- Scrape → Score → Generate proposal draft → Send to Telegram ✅
+- Lead/Pipeline CRM, Templates, Analytics, Invoice, Client models all exist in DB ✅
+
+### What's broken
+Proposal sits in Telegram. No approval flow, no "I sent this" tracking, no reply detection, no lead conversion, no invoice generation. Loop breaks after step 1.
+
+---
+
+### Phase 1 — Proposal Flow (start here)
+**Goal:** Turn draft proposals into tracked applications
+
+- [ ] **Proposal approve UI** — Dashboard shows priority jobs with AI proposal. One-click marks as "applied", saves to DB, logs to Analytics (`proposals++`)
+- [ ] **Inline edit** — Edit proposal text before marking applied
+- [ ] **`/apply [job_id]` Telegram command** — Mark applied from phone
+- [ ] **Analytics write** — `proposals++` in Analytics table on every apply
+
+### Phase 2 — Reply & Lead Conversion
+**Goal:** Track client responses, auto-create leads
+
+- [ ] **`/replied [job_id]` Telegram command** — Marks job "replied", auto-creates Lead at "engaged" stage, sends confirmation
+- [ ] **"Awaiting Reply" UI section** — Shows applied jobs + days since applied
+- [ ] **Analytics write** — `responses++` on reply
+
+### Phase 3 — Win → Invoice → Analytics
+**Goal:** Close the loop from win to revenue
+
+- [ ] **`/won [job_id] [amount]` Telegram command** — Marks won, creates Invoice (draft), moves Lead to "won", updates Analytics (`wins++`, `revenue += amount`)
+- [ ] **`/lost [job_id]` Telegram command** — Marks lost, cleans pipeline
+- [ ] **Analytics dashboard** — Wire Analytics model to show real conversion: proposals → responses → wins → revenue
+- [ ] **Template performance** — Win/loss updates `wins`/`sent` on linked Template
+
+### Full loop when done
+```
+Scrape → Score → Draft Proposal → [APPROVE] → Applied
+                                                  ↓
+                                         [/replied] → Lead Created
+                                                  ↓
+                                         [/won $X] → Invoice Created
+                                                  ↓
+                                    Analytics updated end-to-end
+```

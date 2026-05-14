@@ -304,3 +304,33 @@ coolify-redis      Up  internal
 - [ ] Google OAuth — add `GOOGLE_CLIENT_ID` + `GOOGLE_CLIENT_SECRET` to VPS `.env.production` and Coolify env vars when ready
 - [ ] Domain — point A record to 194.163.161.220 → enable Coolify Traefik → HTTPS auto via Let's Encrypt
 - [ ] Apify Upwork scraper — `lib/platforms/upwork.ts`, add `APIFY_TOKEN` + `APIFY_UPWORK_ACTOR_ID` to env
+
+---
+
+## 2026-05-14 — Session 7 (Better Auth Migration)
+
+### Done
+
+#### Migrated: next-auth v4 → better-auth v1.6.11
+- `lib/auth.ts` — rewrote with `betterAuth()` + `prismaAdapter` + Google OAuth `socialProviders`
+- `lib/auth-client.ts` — new file, `createAuthClient()` for client-side `useSession` / `signIn.social` / `signOut`
+- `app/api/auth/[...all]/route.ts` — new route using `toNextJsHandler(auth)` (replaces `[...nextauth]`)
+- Deleted `app/api/auth/[...nextauth]/route.ts`
+- All pages/components updated to import from `@/lib/auth-client`
+- `prisma/schema.prisma` — auth models rewritten for Better Auth:
+  - `User.emailVerified`: `DateTime?` → `Boolean`
+  - `Session`: new fields `token`, `expiresAt`, `ipAddress`, `userAgent`
+  - `Account`: completely restructured (`accountId`, `providerId`, `accessToken`, etc.)
+  - `VerificationToken` → `Verification` (new fields)
+- `prisma/migrations/20260514_better_auth/migration.sql` — SQL to drop old NextAuth tables and recreate with Better Auth schema
+- `.env.local` — replaced `NEXTAUTH_*` with `BETTER_AUTH_URL` + `BETTER_AUTH_SECRET`, added `GOOGLE_CLIENT_ID`/`GOOGLE_CLIENT_SECRET`
+- `.env.example` — updated auth section for Better Auth
+- TypeScript: 0 errors ✅
+- Prisma client regenerated ✅
+- Committed: `ac03b6c`
+
+### Remaining for Google OAuth to work
+1. Create OAuth client at console.cloud.google.com → APIs → Credentials → OAuth 2.0 Client ID
+2. Authorised redirect URI: `http://194.163.161.220/api/auth/callback/google`
+3. Add `GOOGLE_CLIENT_ID` + `GOOGLE_CLIENT_SECRET` to Coolify env vars (update NEXTAUTH_URL → BETTER_AUTH_URL there too)
+4. Run migration on VPS: `docker exec nexara-job-hunter npx prisma migrate deploy`

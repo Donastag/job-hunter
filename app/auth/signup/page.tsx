@@ -25,6 +25,8 @@ export default function SignUpPage() {
     if (error) {
       setError(error.message || 'Failed to create account')
       setLoading(false)
+    } else {
+      router.push('/dashboard')
     }
   }
 

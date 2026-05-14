@@ -23,6 +23,8 @@ export default function SignInPage() {
     if (error) {
       setError(error.message || 'Invalid email or password')
       setLoading(false)
+    } else {
+      router.push('/dashboard')
     }
   }
 

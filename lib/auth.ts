@@ -1,16 +1,18 @@
-import NextAuth from "next-auth"
-import GoogleProvider from "next-auth/providers/google"
+import { betterAuth } from "better-auth"
+import { prismaAdapter } from "better-auth/adapters/prisma"
+import { prisma } from "@/lib/db"
 
-export const authOptions = {
-  providers: [
-    GoogleProvider({
-      clientId: process.env.GOOGLE_ID || "demo",
-      clientSecret: process.env.GOOGLE_SECRET || "demo",
-    }),
-  ],
-  pages: {
-    signIn: '/auth/signin',
+export const auth = betterAuth({
+  database: prismaAdapter(prisma, {
+    provider: "postgresql",
+  }),
+  socialProviders: {
+    google: {
+      clientId: process.env.GOOGLE_CLIENT_ID as string,
+      clientSecret: process.env.GOOGLE_CLIENT_SECRET as string,
+    },
   },
-}
-
-export default NextAuth(authOptions)
+  trustedOrigins: [
+    process.env.BETTER_AUTH_URL || "http://localhost:3000",
+  ],
+})

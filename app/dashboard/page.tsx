@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react'
 import TelegramChat from '@/components/telegram-chat'
 import ProposalModal from '@/components/proposal-modal'
-import { signOut } from 'next-auth/react'
+import { authClient } from '@/lib/auth-client'
 import { Bell, LogOut, Trash, X, Settings, Key, Globe, User, Shield, Moon, Sun } from 'lucide-react'
 
 interface Job {
@@ -333,7 +333,7 @@ export default function DashboardPage() {
                   {/* Logout */}
                   <div style={{ padding: "8px 16px" }}>
                     <button 
-                      onClick={() => signOut()}
+                      onClick={() => authClient.signOut({ fetchOptions: { onSuccess: () => { window.location.href = '/auth/signin' } } })}
                       style={{
                         background: "rgba(239,68,68,0.1)", border: "1px solid rgba(239,68,68,0.3)",
                         color: "#EF4444", padding: "8px 12px", borderRadius: 6, cursor: "pointer",

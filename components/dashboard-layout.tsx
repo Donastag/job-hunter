@@ -1,7 +1,7 @@
 'use client'
 
 import { useState } from 'react'
-import { useSession } from 'next-auth/react'
+import { authClient } from '@/lib/auth-client'
 import { 
   Home, 
   Briefcase, 
@@ -13,7 +13,7 @@ import {
 } from 'lucide-react'
 
 export function DashboardLayout({ children }: { children: React.ReactNode }) {
-  const { data: session } = useSession()
+  const { data: session } = authClient.useSession()
   const [sidebarOpen, setSidebarOpen] = useState(false)
 
   const navigation = [

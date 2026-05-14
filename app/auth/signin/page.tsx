@@ -1,16 +1,13 @@
 'use client'
 
-import { signIn } from 'next-auth/react'
+import { authClient } from '@/lib/auth-client'
 
 export default function SignInPage() {
   const handleGoogleSignIn = async () => {
-    try {
-      await signIn('google', { 
-        callbackUrl: '/dashboard'
-      })
-    } catch (error) {
-      console.error('Google sign-in error:', error)
-    }
+    await authClient.signIn.social({
+      provider: 'google',
+      callbackURL: '/dashboard',
+    })
   }
 
   return (

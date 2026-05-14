@@ -112,3 +112,195 @@ cd command-centre && npm start
 2. **VPS deploy** — Coolify + Docker, both apps (Next.js :3000 + Command Centre :4200)
 3. **Command Centre Phase 2** — Finance + Clients modules
 4. **Apify Upwork** — after VPS running
+
+---
+
+## 2026-05-13 — Session 4 (Telegram Fix + Command Centre Phase 2 + VPS Deploy)
+
+### Done
+
+#### Telegram Fixed
+- New bot token: `8946685736:AAEXXtKcUGXAOTgTjJlZVX5bkUY0Zp4DK6E`
+- Correct chat ID: `7636801682` (found via getUpdates after user messaged bot)
+- `lib/telegram.ts` — full class with all notification methods committed
+
+#### Telegram Bot Commands (two-way)
+- Built `lib/telegram-bot-commands.ts` — long-polling bot
+- Commands: `/help` `/stats` `/jobs` `/pipeline` `/finance` `/hunt`
+- Wired via `instrumentation.ts` → starts on server boot alongside cron
+
+#### Command Centre Phase 2
+- **Finance module** (`/finance`) — invoice list, create, update status, totals by status
+- **Clients module** (`/clients`) — client directory, add/edit, link to invoices
+- Both modules use `invoices` and `clients` PostgreSQL tables (Prisma `@@map`)
+
+#### Database Migrated: SQLite → PostgreSQL
+- Prisma schema updated to PostgreSQL datasource
+- Added `Invoice` model (`@@map("invoices")`) and `Client` model (`@@map("clients")`)
+- Single migration: `prisma/migrations/20260513_init/migration.sql`
+- Old SQLite migrations removed from repo
+
+#### Docker + Traefik + VPS Deploy
+- Multi-stage Dockerfile: builder → runner, Prisma 5.22.0 baked in
+- docker-compose.yml: Traefik + PostgreSQL + Job Hunter + Command Centre
+- Command Centre bound to Tailscale IP only (100.119.35.90:4200)
+- Deployed to Contabo VPS 194.163.161.220
+
+### All Containers Running ✅
+```
+nexara-traefik          Up   (reverse proxy :80/:443)
+nexara-postgres         Up   (healthy, :5432 internal)
+nexara-job-hunter       Up   (http://194.163.161.220)
+nexara-command-centre   Up   (http://100.119.35.90:4200 — Tailscale)
+```
+
+### Deployment Gotchas
+1. `DATABASE_URL` must be explicit — password `Nx2026!vps#secure` has `#` (→ `%23`)
+   - Set in `/opt/nexara/.env.production`: `DATABASE_URL=postgresql://nexara:Nx2026!vps%23secure@postgres:5432/nexara`
+   - docker-compose.yml uses `DATABASE_URL: ${DATABASE_URL}` (not inline construction)
+2. Old SQLite migrations caused `P3009` on fresh PostgreSQL — deleted from repo
+3. Prisma CLI installed via `npm install prisma@5.22.0` in Dockerfile runner (not npx)
+
+### Verified ✅
+- Job Hunter live at http://194.163.161.220 (50 jobs in dashboard)
+- Pipeline/cron running — manual run confirmed, dedup working
+- Telegram bot @Nexarahunterbot online — sendMessage confirmed
+- OpenRouter API key loaded (AI proposals enabled)
+
+### Next Steps
+- [ ] Test Telegram bot commands from phone (/stats, /hunt, /jobs)
+- [ ] Verify Command Centre at http://100.119.35.90:4200 (Tailscale)
+- [ ] Add Google OAuth credentials (GOOGLE_CLIENT_ID + GOOGLE_CLIENT_SECRET)
+- [ ] Get domain → Nginx/Caddy for HTTPS
+- [ ] Apify Upwork scraper
+- [ ] Command Centre Phase 3: Knowledge + Portfolio modules
+
+---
+
+## 2026-05-14 — Session 5 (Command Centre Phase 3 + Coolify)
+
+### Done
+
+#### Command Centre Phase 3
+- **Knowledge module** (`/knowledge`) — categorised learnings (proposal/platform/tech/client/general)
+  - Full CRUD: add, edit, delete entries
+  - Filter tabs by category, tag support, source tracking
+  - DB table: `knowledge_entries` (created directly via psql — not in Prisma image)
+- **Portfolio module** (`/portfolio`) — completed projects showcase
+  - Fields: title, client, tech stack, outcome, revenue, testimonial, URL, completed date
+  - Status: active / archived
+  - Stats bar: total projects, total revenue, avg deal value
+  - DB table: `portfolio_items` (created directly via psql)
+- Nav updated with KNOWLEDGE + PORTFOLIO links
+- Migration file: `prisma/migrations/20260514_knowledge_portfolio/migration.sql`
+
+> **Note on future rebuilds:** The `knowledge_entries` and `portfolio_items` tables were applied
+> directly via psql (not through a Docker image rebuild). The migration SQL is in the repo —
+> next time job-hunter image is rebuilt, `prisma migrate deploy` will try to apply it.
+> Since we manually registered it in `_prisma_migrations`, it will be skipped cleanly.
+
+#### Coolify Installed
+- **URL:** `http://194.163.161.220:8000`
+- **Version:** 4.0.0 (latest)
+- **Installed at:** `/data/coolify/`
+- **Config/env:** `/data/coolify/source/.env`
+- No port conflict — job-hunter stays on :80, Coolify UI on :8000
+- Coolify's Traefik proxy not yet activated (waiting for domain)
+
+#### Deployment Strategy (for future reference)
+- **Safe deploy flow:** push to `main` → SSH to VPS → `git pull && docker compose build && up -d`
+- **Never edit files directly on VPS** — causes git drift (learned the hard way with docker-compose.yml)
+- **Coolify auto-deploy (future):** connect GitHub repo → push to main → Coolify builds + deploys automatically
+- **When domain arrives:**
+  1. Point DNS A record to 194.163.161.220
+  2. Enable Coolify's Traefik proxy (Settings → Proxy)
+  3. Remove `ports: "80:3000"` from job-hunter docker-compose
+  4. Add domain in Coolify → auto HTTPS via Let's Encrypt
+  5. Command Centre gets a subdomain too (e.g. cc.yourdomain.com)
+
+#### Upwork Scraping (for future reference)
+- Direct scraping blocked by Cloudflare — all approaches fail
+- **Best option: Apify** (cloud scraper platform)
+  - Has maintained Upwork actor, handles Cloudflare automatically
+  - REST API call — fits existing `lib/platforms/` pattern
+  - Free tier: $5 credits/mo (good for testing)
+  - Starter: $49/mo (~8–12 runs/day viable)
+  - Run Upwork scrape every 2–3 hours (not 30 min) to keep costs low
+  - Integration: add `APIFY_TOKEN` + `APIFY_UPWORK_ACTOR_ID` to .env, write `lib/platforms/upwork.ts`
+
+#### n8n / OpenClaw / VPS upgrade notes
+- **n8n:** Not needed — OpenClaw is code-based (cron + OpenRouter API). Skip it.
+- **OpenClaw runs on Mac** — not VPS. VPS = always-on services only (scraping, cron, Telegram bot). Mac = Claude Code agent sessions for proposals, builds, delivery.
+- **VPS upgrade:** Not needed yet. 7.8GB total, only ~1GB used. Plenty of headroom for Coolify + future services.
+
+### Current Stack on VPS
+```
+coolify            Up  :8000  (management UI)
+nexara-job-hunter  Up  :80    (http://194.163.161.220)
+nexara-command-centre Up :4200 (Tailscale only)
+nexara-postgres    Up  internal (healthy)
+coolify-db         Up  internal (Coolify's own PostgreSQL)
+coolify-redis      Up  internal
+```
+
+### Next Steps
+- [x] Open http://194.163.161.220:8000 → create Coolify admin account
+- [x] Connect GitHub repo in Coolify (Donastag/job-hunter)
+- [x] Import nexara docker-compose stack into Coolify management
+- [x] All production env vars added in Coolify (DATABASE_URL, NEXTAUTH_*, TELEGRAM_*, OPENROUTER_API_KEY, POSTGRES_PASSWORD, TAILSCALE_IP)
+- [x] **Telegram bot commands verified working** (/stats, /hunt, /jobs confirmed from phone)
+- [ ] Add Google OAuth credentials to VPS .env.production + Coolify env vars
+- [ ] Get domain → enable Coolify Traefik → HTTPS for everything
+- [ ] Apify Upwork scraper integration
+- [x] Push-to-deploy webhook: GitHub hook ID 623113601 → Coolify /webhooks/source/github/events/manual
+
+### Coolify Resource
+- URL: http://194.163.161.220:8000
+- Project: Nexara
+- Resource: job-hunter:main-hj0yfuj73h9jrc3w5wftmzva
+- Compose file: /docker-compose.yml (branch: main)
+- Login: danstedstagy@gmail.com / Nx2026!coolify
+
+---
+
+## 2026-05-14 — Session 6 (Coolify Wired + Auto-Deploy Live)
+
+### Done
+
+#### Coolify Fully Configured
+- Compose file location fixed: `/docker-compose.yml` (was defaulting to `.yaml`)
+- Compose file loaded — Coolify parsed both services (`job-hunter`, `command-centre`)
+- All production env vars saved in Coolify UI:
+  - `POSTGRES_DB/USER/PASSWORD`, `DATABASE_URL` (with `%23` encoded `#`)
+  - `NEXTAUTH_URL=http://194.163.161.220`, `NEXTAUTH_SECRET`
+  - `TELEGRAM_BOT_TOKEN`, `TELEGRAM_CHAT_ID`
+  - `OPENROUTER_API_KEY`, `PIPELINE_CRON=*/30 * * * *`
+  - `TAILSCALE_IP=100.119.35.90`
+
+#### Push-to-Deploy Webhook Live
+- GitHub hook ID: `623113601`
+- Trigger: push to `main` branch
+- Coolify endpoint: `http://194.163.161.220:8000/webhooks/source/github/events/manual`
+- Secret: `fqpOg4HN49hD0DcnxrBriyL2LxLPvsQy003OBBHX`
+- **Flow:** push to `main` → GitHub fires webhook → Coolify builds + `docker compose up -d` on VPS
+
+#### Verified Working
+- **Telegram bot commands** confirmed from phone (`/stats`, `/hunt`, `/jobs`) ✅
+- **Job Hunter** live at http://194.163.161.220 ✅
+- **Coolify UI** at http://194.163.161.220:8000 ✅
+
+### Deploy Flow Going Forward
+```
+1. Make changes locally → test
+2. git push origin main
+3. GitHub → Coolify webhook fires automatically
+4. Coolify pulls repo, builds, docker compose up -d
+5. Check http://194.163.161.220 to confirm
+```
+- DB data safe — lives in `postgres-data` Docker volume, survives rebuilds
+- First Coolify-triggered deploy will replace manually-started containers (safe, same names)
+
+### Remaining (non-blocking)
+- [ ] Google OAuth — add `GOOGLE_CLIENT_ID` + `GOOGLE_CLIENT_SECRET` to VPS `.env.production` and Coolify env vars when ready
+- [ ] Domain — point A record to 194.163.161.220 → enable Coolify Traefik → HTTPS auto via Let's Encrypt
+- [ ] Apify Upwork scraper — `lib/platforms/upwork.ts`, add `APIFY_TOKEN` + `APIFY_UPWORK_ACTOR_ID` to env

@@ -371,49 +371,46 @@ postgres             Up  internal        (healthy)
 
 ---
 
-## ⏭ NEXT SESSION — Agent Pipeline (Phase 1 → 3)
-
-> **Goal:** Close the automation loop from proposal draft → apply → reply → win → invoice → analytics
-
-### What already works
-- Scrape → Score → Generate proposal draft → Send to Telegram ✅
-- Lead/Pipeline CRM, Templates, Analytics, Invoice, Client models all exist in DB ✅
-
-### What's broken
-Proposal sits in Telegram. No approval flow, no "I sent this" tracking, no reply detection, no lead conversion, no invoice generation. Loop breaks after step 1.
-
 ---
 
-### Phase 1 — Proposal Flow (start here)
-**Goal:** Turn draft proposals into tracked applications
+## 2026-05-14 — Session 8 (Agent Pipeline Phase 1-3) ✅
 
-- [ ] **Proposal approve UI** — Dashboard shows priority jobs with AI proposal. One-click marks as "applied", saves to DB, logs to Analytics (`proposals++`)
-- [ ] **Inline edit** — Edit proposal text before marking applied
-- [ ] **`/apply [job_id]` Telegram command** — Mark applied from phone
-- [ ] **Analytics write** — `proposals++` in Analytics table on every apply
+### Done
 
-### Phase 2 — Reply & Lead Conversion
-**Goal:** Track client responses, auto-create leads
+#### Phase 1 — Proposal Flow ✅
+- `lib/analytics.ts` — upsert helper for daily Analytics row
+- `app/api/jobs/[id]/route.ts` — PATCH status with side effects (proposals++/responses++/won side effects)
+- `components/proposal-modal.tsx` — dark-theme rewrite, inline editable textarea, **MARK APPLIED** button
+- Dashboard optimistic update when job marked applied
 
-- [ ] **`/replied [job_id]` Telegram command** — Marks job "replied", auto-creates Lead at "engaged" stage, sends confirmation
-- [ ] **"Awaiting Reply" UI section** — Shows applied jobs + days since applied
-- [ ] **Analytics write** — `responses++` on reply
+#### Phase 2 — Reply & Lead Conversion ✅
+- `/replied [job_id]` Telegram command — marks job replied, auto-creates Lead at "engaged"
+- **Awaiting Reply** section in dashboard feed — shows applied jobs, one-click "REPLIED ✓" button
+- Analytics.responses++ on reply
 
-### Phase 3 — Win → Invoice → Analytics
-**Goal:** Close the loop from win to revenue
+#### Phase 3 — Win → Invoice → Analytics ✅
+- `/won [job_id] [amount]` — marks won, creates Invoice draft, logs wins/revenue to Analytics
+- `/lost [job_id]` — marks lost
+- `app/api/analytics/route.ts` — rolling 30-day real data
+- Analytics tab wired to live DB data (proposals/responses/wins/revenue/rates)
 
-- [ ] **`/won [job_id] [amount]` Telegram command** — Marks won, creates Invoice (draft), moves Lead to "won", updates Analytics (`wins++`, `revenue += amount`)
-- [ ] **`/lost [job_id]` Telegram command** — Marks lost, cleans pipeline
-- [ ] **Analytics dashboard** — Wire Analytics model to show real conversion: proposals → responses → wins → revenue
-- [ ] **Template performance** — Win/loss updates `wins`/`sent` on linked Template
+#### Also built
+- `/apply [job_id]` Telegram command — mark applied from phone
+- `app/api/jobs/route.ts` — `?take=N` param, computed `timeAgo` field
 
-### Full loop when done
+### Full Loop — Closed ✅
 ```
-Scrape → Score → Draft Proposal → [APPROVE] → Applied
-                                                  ↓
-                                         [/replied] → Lead Created
-                                                  ↓
-                                         [/won $X] → Invoice Created
-                                                  ↓
-                                    Analytics updated end-to-end
+Scrape → Score → OPEN PROPOSAL → edit → MARK APPLIED
+                                              ↓
+                                    REPLIED ✓ (UI) or /replied (Telegram)
+                                          → Lead at Engaged
+                                              ↓
+                                    /won job_id 5000
+                                          → Invoice draft
+                                          → Analytics updated
 ```
+
+### ⏭ Next Steps
+- [ ] Domain → Traefik labels → HTTPS auto via Let's Encrypt
+- [ ] Apify Upwork scraper — `lib/platforms/upwork.ts`, `APIFY_TOKEN` + `APIFY_UPWORK_ACTOR_ID`
+- [ ] Template performance — link templates to jobs, update wins/sent on close

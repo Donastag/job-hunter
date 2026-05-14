@@ -24,13 +24,27 @@ export async function GET(request: Request) {
       where = { ...where, platform }
     }
     
+    const takeParam = searchParams.get('take')
+    const take = takeParam ? Math.min(parseInt(takeParam), 500) : 50
+
     const jobs = await prisma.job.findMany({
       where,
       orderBy: { score: 'desc' },
-      take: 50,
+      take,
     })
-    
-    return NextResponse.json(jobs)
+
+    const now = Date.now()
+    const withAge = jobs.map(j => ({
+      ...j,
+      timeAgo: j.fetchedAt
+        ? (() => {
+            const d = Math.floor((now - new Date(j.fetchedAt).getTime()) / 86400000)
+            return d === 0 ? 'today' : d === 1 ? '1d ago' : `${d}d ago`
+          })()
+        : '—',
+    }))
+
+    return NextResponse.json(withAge)
   } catch (error) {
     console.error('Error fetching jobs:', error)
     return NextResponse.json({ error: 'Failed to fetch jobs' }, { status: 500 })

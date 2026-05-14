@@ -94,18 +94,23 @@ export default function DashboardPage() {
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [jobs, setJobs] = useState<Job[]>([]);
   const [pipeline, setPipeline] = useState<Record<string, Array<{name: string; value: number; source: string; stage: string}>>>({});
+  const [analytics, setAnalytics] = useState<{ proposals: number; responses: number; wins: number; revenue: number; winRate: number; responseRate: number; jobsSeen: number } | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     async function fetchData() {
       try {
-        const [jobsRes, pipeRes] = await Promise.all([
-          fetch('/api/jobs'),
+        const [jobsRes, pipeRes, analyticsRes] = await Promise.all([
+          fetch('/api/jobs?take=200'),
           fetch('/api/pipeline'),
+          fetch('/api/analytics'),
         ])
-        const [jobsData, pipeData] = await Promise.all([jobsRes.json(), pipeRes.json()])
+        const [jobsData, pipeData, analyticsData] = await Promise.all([
+          jobsRes.json(), pipeRes.json(), analyticsRes.json(),
+        ])
         if (Array.isArray(jobsData)) setJobs(jobsData.map(mapJob))
         if (pipeData && typeof pipeData === 'object') setPipeline(pipeData)
+        if (analyticsData && !analyticsData.error) setAnalytics(analyticsData)
       } catch (e) {
         console.error('fetch error', e)
       } finally {
@@ -421,6 +426,61 @@ export default function DashboardPage() {
           <div style={{ flex: 1, display: "flex", overflow: "hidden" }}>
             {/* Job Feed */}
             <div style={{ flex: 1, overflowY: "auto", padding: "20px 24px" }}>
+              {/* Awaiting Reply */}
+              {(() => {
+                const awaiting = jobs.filter(j => j.status === 'applied')
+                if (awaiting.length === 0) return null
+                return (
+                  <div style={{
+                    marginBottom: 20, background: '#0D1117',
+                    border: '1px solid rgba(139,92,246,0.3)',
+                    borderLeft: '3px solid #8B5CF6', borderRadius: 8, padding: '14px 16px',
+                  }}>
+                    <div style={{
+                      fontSize: 10, color: '#8B5CF6', letterSpacing: '0.1em',
+                      fontWeight: 700, marginBottom: 12,
+                    }}>
+                      ⏳ AWAITING REPLY — {awaiting.length} job{awaiting.length !== 1 ? 's' : ''}
+                    </div>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                      {awaiting.map(j => (
+                        <div key={j.id} style={{
+                          display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+                          padding: '8px 12px', background: 'rgba(139,92,246,0.06)',
+                          border: '1px solid rgba(139,92,246,0.15)', borderRadius: 6,
+                        }}>
+                          <div>
+                            <div style={{ fontSize: 12, color: '#E2E8F0', fontWeight: 600 }}>
+                              {j.title.length > 60 ? j.title.slice(0, 60) + '…' : j.title}
+                            </div>
+                            <div style={{ fontSize: 10, color: '#64748B', marginTop: 2 }}>
+                              {j.platform} · {j.budget} · applied {j.posted}
+                            </div>
+                          </div>
+                          <button
+                            onClick={async () => {
+                              const res = await fetch(`/api/jobs/${j.id}`, {
+                                method: 'PATCH',
+                                headers: { 'Content-Type': 'application/json' },
+                                body: JSON.stringify({ status: 'replied' }),
+                              })
+                              if (res.ok) setJobs(prev => prev.map(jb => jb.id === j.id ? { ...jb, status: 'replied' } : jb))
+                            }}
+                            style={{
+                              background: 'rgba(16,185,129,0.1)', border: '1px solid rgba(16,185,129,0.3)',
+                              color: '#10B981', padding: '6px 14px', borderRadius: 5, cursor: 'pointer',
+                              fontSize: 10, fontFamily: 'inherit', letterSpacing: '0.08em',
+                              fontWeight: 700, flexShrink: 0, marginLeft: 12,
+                            }}>
+                            REPLIED ✓
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )
+              })()}
+
               {/* Filters */}
               <div style={{ display: "flex", gap: 8, marginBottom: 20, alignItems: "center" }}>
                 <span style={{ fontSize: 11, color: "#64748B", letterSpacing: "0.08em", marginRight: 4 }}>FILTER</span>
@@ -854,12 +914,12 @@ export default function DashboardPage() {
             </div>
             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 16, marginBottom: 24 }}>
               {[
-                { label: "Proposal Conversion", value: "22%", trend: "+4%", good: true },
-                { label: "Avg Response Time", value: "18 min", trend: "↓ 6 min", good: true },
-                { label: "Top Category Win %", value: "36%", sub: "AI Automation", good: true },
-                { label: "Avg Contract Value", value: "$1,840", trend: "+$340", good: true },
-                { label: "Proposals / Week", value: "12.4", trend: "↑ 2.1", good: true },
-                { label: "Skipped (low score)", value: "68%", sub: "of all jobs seen", good: false },
+                { label: "Proposals Sent", value: analytics ? String(analytics.proposals) : "—", sub: "last 30 days", good: true },
+                { label: "Responses", value: analytics ? String(analytics.responses) : "—", sub: `${analytics?.responseRate ?? 0}% response rate`, good: true },
+                { label: "Wins", value: analytics ? String(analytics.wins) : "—", sub: `${analytics?.winRate ?? 0}% win rate`, good: true },
+                { label: "Revenue", value: analytics ? `KES ${analytics.revenue.toLocaleString()}` : "—", sub: "last 30 days", good: true },
+                { label: "Jobs Scored", value: analytics ? String(analytics.jobsSeen) : "—", sub: "pipeline scanned", good: true },
+                { label: "Applied Today", value: String(jobs.filter(j => j.status === 'applied').length), sub: "awaiting reply", good: false },
               ].map((m, i) => (
                 <div key={i} style={{
                   background: "#0D1117",
@@ -875,7 +935,7 @@ export default function DashboardPage() {
                     fontFamily: "var(--font-geist-mono), monospace",
                   }}>{m.value}</div>
                   <div style={{ fontSize: 11, color: m.good ? "#10B981" : "#64748B", marginTop: 8 }}>
-                    {m.trend || m.sub}
+                    {m.sub}
                   </div>
                 </div>
               ))}
@@ -938,6 +998,10 @@ export default function DashboardPage() {
         isOpen={proposalModalOpen}
         onClose={() => setProposalModalOpen(false)}
         job={selected}
+        onApplied={(jobId) => {
+          setJobs(prev => prev.map(j => j.id === jobId ? { ...j, status: 'applied' } : j))
+          setSelected(null)
+        }}
       />
     </div>
   )

@@ -1,5 +1,6 @@
 import { prisma } from './db'
 import { runPipeline } from './pipeline'
+import { logAnalyticsEvent } from './analytics'
 
 const TOKEN = () => process.env.TELEGRAM_BOT_TOKEN || ''
 const CHAT_ID = () => process.env.TELEGRAM_CHAT_ID || ''
@@ -30,14 +31,181 @@ async function cmdHelp(chatId: number) {
   await send(chatId, [
     '🤖 <b>Nexara Hunt Bot</b>',
     '',
-    'Commands:',
+    'Discovery:',
     '/hunt — Run a job hunt now',
     '/stats — Live job stats',
     '/jobs — Top 5 priority jobs',
+    '',
+    'Proposal flow:',
+    '/apply [job_id] — Mark job as applied',
+    '/replied [job_id] — Client replied → creates lead',
+    '/won [job_id] [amount] — Won → creates invoice',
+    '/lost [job_id] — Mark as lost',
+    '',
+    'CRM &amp; Finance:',
     '/pipeline — Pipeline Kanban summary',
     '/finance — Invoice &amp; earnings summary',
     '/help — Show this menu',
   ].join('\n'))
+}
+
+async function cmdApply(chatId: number, jobId: string) {
+  if (!jobId) {
+    await send(chatId, '⚠️ Usage: /apply [job_id]\nGet IDs from /jobs')
+    return
+  }
+  try {
+    const job = await prisma.job.findFirst({
+      where: {
+        OR: [
+          { id: jobId },
+          { id: { startsWith: jobId } },
+        ],
+      },
+    })
+    if (!job) {
+      await send(chatId, `❌ Job not found: <code>${jobId}</code>`)
+      return
+    }
+    await prisma.job.update({ where: { id: job.id }, data: { status: 'applied' } })
+    await logAnalyticsEvent('proposals')
+    await send(chatId, [
+      '✅ <b>Marked as Applied</b>',
+      '',
+      `📌 <b>${job.title}</b>`,
+      `💰 ${job.budget || '—'}`,
+      `🏢 ${job.platform}`,
+      '',
+      'Use <b>/replied ' + job.id.slice(0, 8) + '</b> when they respond.',
+    ].join('\n'))
+  } catch (err) {
+    await send(chatId, `❌ Error: ${err instanceof Error ? err.message : 'unknown'}`)
+  }
+}
+
+async function cmdReplied(chatId: number, jobId: string) {
+  if (!jobId) {
+    await send(chatId, '⚠️ Usage: /replied [job_id]')
+    return
+  }
+  try {
+    const job = await prisma.job.findFirst({
+      where: {
+        OR: [
+          { id: jobId },
+          { id: { startsWith: jobId } },
+        ],
+      },
+    })
+    if (!job) {
+      await send(chatId, `❌ Job not found: <code>${jobId}</code>`)
+      return
+    }
+    await prisma.job.update({ where: { id: job.id }, data: { status: 'replied' } })
+    await logAnalyticsEvent('responses')
+
+    const existing = await prisma.lead.findFirst({
+      where: { notes: { contains: job.id } },
+    })
+    let leadMsg = ''
+    if (!existing) {
+      const lead = await prisma.lead.create({
+        data: {
+          name: job.clientName || job.title,
+          source: job.platform,
+          stage: 'engaged',
+          notes: `Job ID: ${job.id} | ${job.title}`,
+          value: 0,
+        },
+      })
+      leadMsg = `\n📋 Lead created: <b>${lead.name}</b> → Engaged`
+    } else {
+      leadMsg = `\n📋 Lead already exists: <b>${existing.name}</b>`
+    }
+
+    await send(chatId, [
+      '✅ <b>Reply Logged</b>',
+      '',
+      `📌 <b>${job.title}</b>` + leadMsg,
+      '',
+      'Use <b>/won ' + job.id.slice(0, 8) + ' [amount]</b> when you close it.',
+    ].join('\n'))
+  } catch (err) {
+    await send(chatId, `❌ Error: ${err instanceof Error ? err.message : 'unknown'}`)
+  }
+}
+
+async function cmdWon(chatId: number, jobId: string, amountStr: string) {
+  if (!jobId) {
+    await send(chatId, '⚠️ Usage: /won [job_id] [amount]\nExample: /won abc123 5000')
+    return
+  }
+  try {
+    const job = await prisma.job.findFirst({
+      where: {
+        OR: [
+          { id: jobId },
+          { id: { startsWith: jobId } },
+        ],
+      },
+    })
+    if (!job) {
+      await send(chatId, `❌ Job not found: <code>${jobId}</code>`)
+      return
+    }
+    const amount = amountStr ? parseFloat(amountStr) : 0
+    await prisma.job.update({ where: { id: job.id }, data: { status: 'won' } })
+    await logAnalyticsEvent({ wins: 1, revenue: amount })
+    const invoice = await prisma.invoice.create({
+      data: {
+        clientName: job.clientName || job.title,
+        description: job.title,
+        amount,
+        status: 'draft',
+      },
+    })
+    await send(chatId, [
+      '🏆 <b>Job Won!</b>',
+      '',
+      `📌 <b>${job.title}</b>`,
+      `💰 Contract value: <b>${fmtKES(amount)}</b>`,
+      `📄 Invoice <b>${invoice.id.slice(0, 8)}</b> created (draft)`,
+      '',
+      'View invoice in Command Centre → Finance.',
+    ].join('\n'))
+  } catch (err) {
+    await send(chatId, `❌ Error: ${err instanceof Error ? err.message : 'unknown'}`)
+  }
+}
+
+async function cmdLost(chatId: number, jobId: string) {
+  if (!jobId) {
+    await send(chatId, '⚠️ Usage: /lost [job_id]')
+    return
+  }
+  try {
+    const job = await prisma.job.findFirst({
+      where: {
+        OR: [
+          { id: jobId },
+          { id: { startsWith: jobId } },
+        ],
+      },
+    })
+    if (!job) {
+      await send(chatId, `❌ Job not found: <code>${jobId}</code>`)
+      return
+    }
+    await prisma.job.update({ where: { id: job.id }, data: { status: 'lost' } })
+    await send(chatId, [
+      '📁 <b>Marked as Lost</b>',
+      '',
+      `📌 ${job.title}`,
+      'Job archived. On to the next one. 💪',
+    ].join('\n'))
+  } catch (err) {
+    await send(chatId, `❌ Error: ${err instanceof Error ? err.message : 'unknown'}`)
+  }
 }
 
 async function cmdStats(chatId: number) {
@@ -174,16 +342,23 @@ async function handleUpdate(update: {
     return
   }
 
-  const cmd = msg.text.split(' ')[0].toLowerCase().replace('@nexarahunterbot', '')
+  const parts = msg.text.trim().split(/\s+/)
+  const cmd = parts[0].toLowerCase().replace('@nexarahunterbot', '')
+  const arg1 = parts[1] || ''
+  const arg2 = parts[2] || ''
 
   switch (cmd) {
     case '/start':
-    case '/help': return cmdHelp(msg.chat.id)
-    case '/stats': return cmdStats(msg.chat.id)
-    case '/jobs': return cmdJobs(msg.chat.id)
-    case '/pipeline': return cmdPipeline(msg.chat.id)
+    case '/help':    return cmdHelp(msg.chat.id)
+    case '/stats':   return cmdStats(msg.chat.id)
+    case '/jobs':    return cmdJobs(msg.chat.id)
+    case '/pipeline':return cmdPipeline(msg.chat.id)
     case '/finance': return cmdFinance(msg.chat.id)
-    case '/hunt': return cmdHunt(msg.chat.id)
+    case '/hunt':    return cmdHunt(msg.chat.id)
+    case '/apply':   return cmdApply(msg.chat.id, arg1)
+    case '/replied': return cmdReplied(msg.chat.id, arg1)
+    case '/won':     return cmdWon(msg.chat.id, arg1, arg2)
+    case '/lost':    return cmdLost(msg.chat.id, arg1)
     default:
       await send(msg.chat.id, `Unknown command. Send /help to see what I can do.`)
   }

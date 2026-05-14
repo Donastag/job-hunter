@@ -46,12 +46,20 @@ export default function HomePage() {
                   <p className="text-gray-600 mb-6">
                     Sign in to start tracking your job applications and get AI-powered assistance
                   </p>
-                  <button
-                    onClick={() => router.push('/auth/signin')}
-                    className="bg-blue-600 text-white px-8 py-3 rounded-lg text-lg font-semibold hover:bg-blue-700 transition-colors shadow-lg"
-                  >
-                    Sign In with Google
-                  </button>
+                  <div className="flex gap-3 justify-center">
+                    <button
+                      onClick={() => router.push('/auth/signin')}
+                      className="bg-blue-600 text-white px-8 py-3 rounded-lg text-lg font-semibold hover:bg-blue-700 transition-colors shadow-lg"
+                    >
+                      Sign In
+                    </button>
+                    <button
+                      onClick={() => router.push('/auth/signup')}
+                      className="bg-white text-blue-600 border-2 border-blue-600 px-8 py-3 rounded-lg text-lg font-semibold hover:bg-blue-50 transition-colors shadow-lg"
+                    >
+                      Create Account
+                    </button>
+                  </div>
                 </div>
 
                 <div className="grid md:grid-cols-3 gap-6 max-w-5xl mx-auto">

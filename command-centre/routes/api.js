@@ -1,6 +1,27 @@
 const router = require('express').Router()
 const db = require('../lib/db')
 
+// Poll for new chat messages (used by chat.ejs agent view)
+router.get('/chat-poll', async (req, res) => {
+  const { sessionId, after } = req.query
+  if (!sessionId) return res.json({ messages: [] })
+  try {
+    const whereParts = ['"sessionId" = $1']
+    const params = [sessionId]
+    if (after) {
+      whereParts.push('"createdAt" > $2')
+      params.push(new Date(after))
+    }
+    const { rows } = await db.query(
+      `SELECT * FROM chat_messages WHERE ${whereParts.join(' AND ')} ORDER BY "createdAt" ASC`,
+      params,
+    )
+    res.json({ messages: rows })
+  } catch (err) {
+    res.status(500).json({ error: err.message })
+  }
+})
+
 // Trigger the Job Hunter scraper via Next.js app on :3000
 router.post('/run-hunt', async (req, res) => {
   try {

@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import { SessionWrapper } from '@/components/session-wrapper';
+import { SupportChat } from '@/components/support-chat';
 import "./globals.css";
 
 const geistSans = Geist({
@@ -30,6 +31,7 @@ export default function RootLayout({
       >
         <SessionWrapper>
           {children}
+          <SupportChat appName="Job Hunter" />
         </SessionWrapper>
       </body>
     </html>

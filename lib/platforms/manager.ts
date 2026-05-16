@@ -1,12 +1,12 @@
-// Upwork: disabled — RSS killed (410), scraping blocked by Cloudflare.
-// Re-enable via Apify actor (upwork-scraper) once VPS is up.
 import { RemoteOKIntegration, type RemoteOKJob } from './remoteok'
 import { RemotiveIntegration, type RemotiveJob } from './remotive'
 import { WeWorkRemotelyIntegration, type WWRJob } from './weworkremotely'
+import { PeoplePerHourIntegration, type PPHJob } from './peopleperhour'
+import { UpworkGraphQLIntegration } from './upwork-graphql'
 import { prisma } from '../db'
 import { calculateScore } from '../scoring'
 
-export type Platform = 'upwork' | 'remoteok' | 'remotive' | 'weworkremotely'
+export type Platform = 'upwork' | 'remoteok' | 'remotive' | 'weworkremotely' | 'peopleperhour'
 
 export interface PlatformJob {
   id: string
@@ -40,16 +40,28 @@ function fromWWR(job: WWRJob): PlatformJob {
   return { ...job, platform: 'weworkremotely' }
 }
 
+function fromPPH(job: PPHJob): PlatformJob {
+  return { ...job, platform: 'peopleperhour', company: undefined }
+}
+
+function fromUpworkGQL(job: import('./upwork').UpworkJob): PlatformJob {
+  return { ...job, platform: 'upwork', company: undefined }
+}
+
 export class PlatformManager {
   private remoteok = new RemoteOKIntegration()
   private remotive = new RemotiveIntegration()
   private wwr = new WeWorkRemotelyIntegration()
+  private pph = new PeoplePerHourIntegration()
+  private upworkGQL = new UpworkGraphQLIntegration()
 
   async fetchAll(): Promise<PlatformJob[]> {
-    const [remoteokJobs, remotiveJobs, wwrJobs] = await Promise.allSettled([
+    const [remoteokJobs, remotiveJobs, wwrJobs, pphJobs, upworkJobs] = await Promise.allSettled([
       this.remoteok.fetchJobs(),
       this.remotive.fetchJobs(),
       this.wwr.fetchJobs(),
+      this.pph.fetchJobs(),
+      this.upworkGQL.fetchJobs(),
     ])
 
     const all: PlatformJob[] = []
@@ -73,6 +85,20 @@ export class PlatformManager {
       console.log(`[Manager] WeWorkRemotely: ${wwrJobs.value.length} jobs`)
     } else {
       console.error('[Manager] WeWorkRemotely failed:', wwrJobs.reason)
+    }
+
+    if (pphJobs.status === 'fulfilled') {
+      all.push(...pphJobs.value.map(fromPPH))
+      console.log(`[Manager] PeoplePerHour: ${pphJobs.value.length} jobs`)
+    } else {
+      console.error('[Manager] PeoplePerHour failed:', pphJobs.reason)
+    }
+
+    if (upworkJobs.status === 'fulfilled') {
+      all.push(...upworkJobs.value.map(fromUpworkGQL))
+      console.log(`[Manager] Upwork GQL: ${upworkJobs.value.length} jobs`)
+    } else {
+      console.error('[Manager] Upwork GQL failed:', upworkJobs.reason)
     }
 
     return all

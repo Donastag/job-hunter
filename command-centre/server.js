@@ -16,6 +16,7 @@ app.use('/finance', require('./routes/finance'))
 app.use('/clients', require('./routes/clients'))
 app.use('/knowledge', require('./routes/knowledge'))
 app.use('/portfolio', require('./routes/portfolio'))
+app.use('/chat', require('./routes/chat'))
 app.use('/api', require('./routes/api'))
 
 app.listen(PORT, () => {

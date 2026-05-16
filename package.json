@@ -18,6 +18,7 @@
     "@vercel/postgres": "^0.10.0",
     "better-auth": "^1.6.11",
     "better-sqlite3": "^12.6.2",
+    "impers": "^0.0.5",
     "lucide-react": "^0.577.0",
     "next": "16.1.6",
     "node-cron": "^4.2.1",

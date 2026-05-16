@@ -410,6 +410,39 @@ Scrape → Score → OPEN PROPOSAL → edit → MARK APPLIED
                                           → Analytics updated
 ```
 
+---
+
+## 2026-05-16 — Session 9 (Phase 4-6: Delivery, Ops, Intelligence)
+
+### Done
+
+#### Phase 4 — Delivery (Agent 3) ✅
+- `lib/project-brief.ts` — AI project kickoff brief via OpenRouter on job win
+- Jobs PATCH: on 'won' → brief generated async → saved to `projectNotes`, invoice linked via `jobId`
+- Dashboard **Projects tab** — won jobs with AI brief, platform win rates, top skills
+- Command Centre **/projects** — active projects, MARK DELIVERED, AI brief, invoice ops
+- Schema: `Job.projectNotes`, `Job.templateUsed`
+
+#### Phase 5 — Invoice Ops ✅
+- `app/api/invoices/[id]` — PATCH; on 'paid' → auto-creates PortfolioItem
+- Telegram: `/invoiced` (mark sent), `/paid` (paid + auto-portfolio), `/overdue` (7d+ unpaid list)
+- Command Centre: SEND/PAID buttons, overdue alert panel
+- Schema: `Invoice.jobId`
+
+#### Phase 6 — Intelligence ✅
+- `app/api/insights` — platform win rates, top skills, monthly revenue
+- Telegram: `/insights` — win rate, revenue, avg deal, best platform, top skill
+- Dashboard analytics tab: all real data, no hardcoded values
+
+### Full Stack Now Live
+```
+Hunt → Score → Proposal → APPLIED → REPLIED → WON
+  → AI brief generated → Invoice linked
+  → Lead at Engaged
+  → /invoiced → /paid → PortfolioItem auto-created
+  → /insights tracks all of it
+```
+
 ### ⏭ Next Steps
 - [ ] Domain → Traefik labels → HTTPS auto via Let's Encrypt
 - [ ] Apify Upwork scraper — `lib/platforms/upwork.ts`, `APIFY_TOKEN` + `APIFY_UPWORK_ACTOR_ID`

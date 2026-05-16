@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { prisma } from '@/lib/db'
 import { logAnalyticsEvent } from '@/lib/analytics'
+import { generateProjectBrief } from '@/lib/project-brief'
 
 export async function PATCH(
   request: Request,
@@ -9,12 +10,22 @@ export async function PATCH(
   try {
     const { id } = await params
     const body = await request.json()
-    const { status, amount } = body as { status: string; amount?: number }
+    const { status, amount, projectNotes, templateUsed } = body as {
+      status?: string
+      amount?: number
+      projectNotes?: string
+      templateUsed?: string
+    }
 
     const job = await prisma.job.findUnique({ where: { id } })
     if (!job) return NextResponse.json({ error: 'Job not found' }, { status: 404 })
 
-    const updated = await prisma.job.update({ where: { id }, data: { status } })
+    const updateData: Record<string, unknown> = {}
+    if (status !== undefined) updateData.status = status
+    if (projectNotes !== undefined) updateData.projectNotes = projectNotes
+    if (templateUsed !== undefined) updateData.templateUsed = templateUsed
+
+    const updated = await prisma.job.update({ where: { id }, data: updateData })
 
     if (status === 'applied') {
       await logAnalyticsEvent('proposals')
@@ -41,12 +52,22 @@ export async function PATCH(
     if (status === 'won') {
       const val = amount ? Number(amount) : 0
       await logAnalyticsEvent({ wins: 1, revenue: val })
+
+      // Generate AI project brief (non-blocking)
+      generateProjectBrief(job).then(brief => {
+        if (brief) {
+          prisma.job.update({ where: { id }, data: { projectNotes: brief } }).catch(() => {})
+        }
+      }).catch(() => {})
+
+      // Create invoice linked to this job
       await prisma.invoice.create({
         data: {
           clientName: job.clientName || job.title,
           description: job.title,
           amount: val,
           status: 'draft',
+          jobId: job.id,
         },
       })
     }

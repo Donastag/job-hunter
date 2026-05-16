@@ -1,0 +1,135 @@
+<%- include('partials/head', { title }) %>
+<%- include('partials/nav', { active }) %>
+
+<div class="px-6 py-5 max-w-6xl mx-auto">
+
+  <!-- Stats bar -->
+  <div class="grid grid-cols-4 gap-3 mb-6">
+    <div style="background:var(--surface);border:1px solid var(--border);border-radius:var(--r-lg);padding:14px 16px;">
+      <div class="mono text-2xl font-bold" style="color:var(--green);"><%= projects.length %></div>
+      <div style="font-size:9px;font-weight:700;letter-spacing:.12em;color:var(--text-3);margin-top:3px;">ACTIVE PROJECTS</div>
+    </div>
+    <div style="background:var(--surface);border:1px solid var(--border);border-radius:var(--r-lg);padding:14px 16px;">
+      <div class="mono text-2xl font-bold" style="color:var(--amber);"><%= pendingInvoices.length %></div>
+      <div style="font-size:9px;font-weight:700;letter-spacing:.12em;color:var(--text-3);margin-top:3px;">DRAFT INVOICES</div>
+    </div>
+    <div style="background:var(--surface);border:1px solid var(--border);border-radius:var(--r-lg);padding:14px 16px;">
+      <div class="mono text-2xl font-bold" style="color:<%= overdueInvoices.length > 0 ? 'var(--red)' : 'var(--text-3)' %>;"><%= overdueInvoices.length %></div>
+      <div style="font-size:9px;font-weight:700;letter-spacing:.12em;color:var(--text-3);margin-top:3px;">OVERDUE</div>
+    </div>
+    <div style="background:var(--surface);border:1px solid var(--border);border-radius:var(--r-lg);padding:14px 16px;">
+      <div class="mono text-2xl font-bold" style="color:var(--green);"><%= portfolioCount %></div>
+      <div style="font-size:9px;font-weight:700;letter-spacing:.12em;color:var(--text-3);margin-top:3px;">PORTFOLIO ITEMS</div>
+    </div>
+  </div>
+
+  <div class="grid grid-cols-3 gap-5">
+
+    <!-- Active Projects -->
+    <div class="col-span-2">
+      <div style="font-size:10px;font-weight:700;letter-spacing:.12em;color:var(--text-3);margin-bottom:12px;">ACTIVE PROJECTS</div>
+
+      <% if (projects.length === 0) { %>
+        <div style="background:var(--surface);border:1px dashed var(--border);border-radius:var(--r-lg);padding:40px;text-align:center;">
+          <div style="font-size:12px;color:var(--text-3);">No active projects. Use /won in Telegram to log a win.</div>
+        </div>
+      <% } %>
+
+      <% projects.forEach(p => { %>
+        <div style="background:var(--surface);border:1px solid var(--border);border-top:2px solid var(--green-ring);border-radius:var(--r-lg);padding:16px 18px;margin-bottom:10px;">
+          <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:8px;">
+            <div>
+              <div style="font-size:13px;font-weight:700;color:var(--text);margin-bottom:3px;">
+                <%= p.title.length > 60 ? p.title.slice(0,60) + '…' : p.title %>
+              </div>
+              <div style="font-size:11px;color:var(--text-3);">
+                <%= p.clientName || p.platform %> · <%= p.budget || '—' %> · won <%= p.ageLabel %>
+              </div>
+            </div>
+            <% if (p.status === 'won') { %>
+              <form method="POST" action="/projects/<%= p.id %>/deliver" style="flex-shrink:0;margin-left:12px;">
+                <button type="submit" style="
+                  background:rgba(16,185,129,.1);border:1px solid var(--green-ring);
+                  color:var(--green);padding:5px 12px;border-radius:var(--r);cursor:pointer;
+                  font-size:10px;font-weight:700;letter-spacing:.08em;
+                ">MARK DELIVERED</button>
+              </form>
+            <% } else { %>
+              <span style="background:rgba(100,116,139,.1);border:1px solid var(--border);color:var(--text-3);padding:5px 12px;border-radius:var(--r);font-size:10px;font-weight:700;letter-spacing:.08em;">DELIVERED</span>
+            <% } %>
+          </div>
+
+          <% if (p.projectNotes) { %>
+            <div style="background:rgba(16,185,129,.04);border:1px solid rgba(16,185,129,.12);border-radius:var(--r);padding:10px 12px;margin-bottom:10px;">
+              <div style="font-size:9px;font-weight:700;letter-spacing:.1em;color:var(--green);margin-bottom:5px;">AI PROJECT BRIEF</div>
+              <div style="font-size:11px;color:var(--text-2);line-height:1.65;white-space:pre-wrap;"><%= p.projectNotes %></div>
+            </div>
+          <% } %>
+
+          <div style="display:flex;gap:6px;flex-wrap:wrap;">
+            <% (p.skills || []).forEach(s => { %>
+              <span style="background:rgba(30,41,59,.8);border:1px solid var(--border);color:var(--text-3);font-size:10px;padding:2px 8px;border-radius:3px;"><%= s %></span>
+            <% }) %>
+          </div>
+        </div>
+      <% }) %>
+    </div>
+
+    <!-- Invoice Ops sidebar -->
+    <div>
+      <!-- Overdue -->
+      <% if (overdueInvoices.length > 0) { %>
+        <div style="background:rgba(239,68,68,.06);border:1px solid rgba(239,68,68,.3);border-radius:var(--r-lg);padding:14px 16px;margin-bottom:16px;">
+          <div style="font-size:10px;font-weight:700;letter-spacing:.12em;color:var(--red);margin-bottom:10px;">⚠ OVERDUE INVOICES</div>
+          <% overdueInvoices.forEach(inv => { %>
+            <div style="margin-bottom:10px;padding-bottom:10px;border-bottom:1px solid rgba(239,68,68,.15);">
+              <div style="font-size:12px;font-weight:600;color:var(--text);margin-bottom:3px;"><%= inv.clientName %></div>
+              <div style="font-size:11px;color:var(--text-3);margin-bottom:8px;">KES <%= Number(inv.amount).toLocaleString() %></div>
+              <form method="POST" action="/projects/invoices/<%= inv.id %>/status">
+                <input type="hidden" name="status" value="paid">
+                <button type="submit" style="
+                  width:100%;background:rgba(16,185,129,.1);border:1px solid var(--green-ring);
+                  color:var(--green);padding:5px;border-radius:var(--r);cursor:pointer;
+                  font-size:10px;font-weight:700;letter-spacing:.08em;
+                ">MARK PAID</button>
+              </form>
+            </div>
+          <% }) %>
+        </div>
+      <% } %>
+
+      <!-- Draft invoices -->
+      <div style="font-size:10px;font-weight:700;letter-spacing:.12em;color:var(--text-3);margin-bottom:10px;">DRAFT INVOICES</div>
+      <% if (pendingInvoices.length === 0) { %>
+        <div style="font-size:11px;color:var(--text-3);padding:12px 0;">No draft invoices.</div>
+      <% } %>
+      <% pendingInvoices.forEach(inv => { %>
+        <div style="background:var(--surface);border:1px solid var(--border);border-radius:var(--r-lg);padding:12px 14px;margin-bottom:8px;">
+          <div style="font-size:12px;font-weight:600;color:var(--text);margin-bottom:2px;"><%= inv.clientName %></div>
+          <div style="font-size:11px;color:var(--text-3);margin-bottom:10px;">KES <%= Number(inv.amount).toLocaleString() %></div>
+          <div style="display:flex;gap:6px;">
+            <form method="POST" action="/projects/invoices/<%= inv.id %>/status" style="flex:1;">
+              <input type="hidden" name="status" value="sent">
+              <button type="submit" style="
+                width:100%;background:rgba(59,130,246,.1);border:1px solid rgba(59,130,246,.35);
+                color:#3B82F6;padding:5px;border-radius:var(--r);cursor:pointer;
+                font-size:10px;font-weight:700;letter-spacing:.06em;
+              ">SEND</button>
+            </form>
+            <form method="POST" action="/projects/invoices/<%= inv.id %>/status" style="flex:1;">
+              <input type="hidden" name="status" value="paid">
+              <button type="submit" style="
+                width:100%;background:rgba(16,185,129,.1);border:1px solid var(--green-ring);
+                color:var(--green);padding:5px;border-radius:var(--r);cursor:pointer;
+                font-size:10px;font-weight:700;letter-spacing:.06em;
+              ">PAID</button>
+            </form>
+          </div>
+        </div>
+      <% }) %>
+    </div>
+
+  </div>
+</div>
+
+<%- include('partials/foot') %>

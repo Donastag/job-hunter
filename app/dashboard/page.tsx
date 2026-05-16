@@ -95,22 +95,30 @@ export default function DashboardPage() {
   const [jobs, setJobs] = useState<Job[]>([]);
   const [pipeline, setPipeline] = useState<Record<string, Array<{name: string; value: number; source: string; stage: string}>>>({});
   const [analytics, setAnalytics] = useState<{ proposals: number; responses: number; wins: number; revenue: number; winRate: number; responseRate: number; jobsSeen: number } | null>(null);
+  const [insights, setInsights] = useState<{
+    summary: { winRate: number; responseRate: number; totalWon: number; totalApplied: number; totalRevenue: number; avgDeal: number; overdueCount: number; activeProjects: number }
+    byPlatform: Array<{ platform: string; won: number; applied: number; rate: number }>
+    topSkills: Array<{ skill: string; count: number }>
+    monthlyRevenue: Record<string, number>
+  } | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     async function fetchData() {
       try {
-        const [jobsRes, pipeRes, analyticsRes] = await Promise.all([
+        const [jobsRes, pipeRes, analyticsRes, insightsRes] = await Promise.all([
           fetch('/api/jobs?take=200'),
           fetch('/api/pipeline'),
           fetch('/api/analytics'),
+          fetch('/api/insights'),
         ])
-        const [jobsData, pipeData, analyticsData] = await Promise.all([
-          jobsRes.json(), pipeRes.json(), analyticsRes.json(),
+        const [jobsData, pipeData, analyticsData, insightsData] = await Promise.all([
+          jobsRes.json(), pipeRes.json(), analyticsRes.json(), insightsRes.json(),
         ])
         if (Array.isArray(jobsData)) setJobs(jobsData.map(mapJob))
         if (pipeData && typeof pipeData === 'object') setPipeline(pipeData)
         if (analyticsData && !analyticsData.error) setAnalytics(analyticsData)
+        if (insightsData && !insightsData.error) setInsights(insightsData)
       } catch (e) {
         console.error('fetch error', e)
       } finally {
@@ -193,7 +201,7 @@ export default function DashboardPage() {
         </div>
 
         <div style={{ display: "flex", gap: 4 }}>
-          {["feed","pipeline","templates","analytics"].map(t => (
+          {["feed","pipeline","projects","templates","analytics"].map(t => (
             <button key={t} onClick={() => setTab(t)} style={{
               background: tab === t ? "rgba(16,185,129,0.1)" : "transparent",
               border: tab === t ? "1px solid rgba(16,185,129,0.35)" : "1px solid transparent",
@@ -847,6 +855,143 @@ export default function DashboardPage() {
           </div>
         )}
 
+        {/* ── PROJECTS TAB ── */}
+        {tab === "projects" && (
+          <div style={{ flex: 1, overflowY: "auto", padding: 24 }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 20 }}>
+              <div style={{ fontSize: 11, color: "#64748B", letterSpacing: "0.1em" }}>
+                ACTIVE PROJECTS — won jobs in delivery
+              </div>
+              {insights && (
+                <div style={{ display: "flex", gap: 16, fontSize: 11 }}>
+                  <span style={{ color: "#10B981" }}>{insights.summary.activeProjects} active</span>
+                  {insights.summary.overdueCount > 0 && (
+                    <span style={{ color: "#EF4444" }}>{insights.summary.overdueCount} overdue invoice{insights.summary.overdueCount !== 1 ? 's' : ''}</span>
+                  )}
+                </div>
+              )}
+            </div>
+
+            {jobs.filter(j => j.status === 'won').length === 0 && (
+              <div style={{
+                textAlign: "center", padding: "60px 0", color: "#4B5563", fontSize: 13,
+                border: "1px dashed #1E293B", borderRadius: 8,
+              }}>
+                No active projects yet. Use /won [job_id] [amount] to log a win.
+              </div>
+            )}
+
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}>
+              {jobs.filter(j => j.status === 'won').map(job => (
+                <div key={job.id} style={{
+                  background: "#0D1117",
+                  borderTop: "2px solid rgba(16,185,129,0.4)",
+                  borderRight: "1px solid #1E293B",
+                  borderBottom: "1px solid #1E293B",
+                  borderLeft: "1px solid #1E293B",
+                  borderRadius: 8, padding: "18px 20px",
+                }}>
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 10 }}>
+                    <div>
+                      <div style={{ fontSize: 13, color: "#F1F5F9", fontWeight: 700, marginBottom: 4 }}>
+                        {job.title.length > 55 ? job.title.slice(0, 55) + '…' : job.title}
+                      </div>
+                      <div style={{ fontSize: 11, color: "#64748B" }}>
+                        {job.company || job.platform} · {job.budget}
+                      </div>
+                    </div>
+                    <span style={{
+                      background: "rgba(16,185,129,0.1)", border: "1px solid rgba(16,185,129,0.3)",
+                      color: "#10B981", fontSize: 9, padding: "3px 8px", borderRadius: 3,
+                      letterSpacing: "0.1em", fontWeight: 700, flexShrink: 0,
+                    }}>WON</span>
+                  </div>
+
+                  {/* AI project brief */}
+                  {job.brief && (
+                    <div style={{
+                      background: "rgba(16,185,129,0.04)", border: "1px solid rgba(16,185,129,0.12)",
+                      borderRadius: 6, padding: "10px 12px", marginBottom: 12,
+                      fontSize: 11, color: "#94A3B8", lineHeight: 1.6,
+                      whiteSpace: "pre-wrap",
+                    }}>
+                      <div style={{ fontSize: 9, color: "#10B981", letterSpacing: "0.1em", marginBottom: 6 }}>
+                        AI BRIEF
+                      </div>
+                      {job.brief}
+                    </div>
+                  )}
+
+                  <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+                    {job.tags.slice(0, 5).map(t => (
+                      <span key={t} style={{
+                        background: "rgba(30,41,59,0.8)", border: "1px solid #1E2D3D",
+                        color: "#64748B", fontSize: 10, padding: "2px 8px", borderRadius: 3,
+                      }}>{t}</span>
+                    ))}
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            {/* Intelligence panel */}
+            {insights && (
+              <div style={{ marginTop: 32 }}>
+                <div style={{ fontSize: 11, color: "#64748B", letterSpacing: "0.1em", marginBottom: 16 }}>
+                  INTELLIGENCE — WIN ANALYSIS
+                </div>
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}>
+                  {/* Platform performance */}
+                  <div style={{ background: "#0D1117", border: "1px solid #1E293B", borderRadius: 8, padding: "18px 20px" }}>
+                    <div style={{ fontSize: 10, color: "#64748B", letterSpacing: "0.1em", marginBottom: 14 }}>BY PLATFORM</div>
+                    {insights.byPlatform.length === 0 && (
+                      <div style={{ fontSize: 11, color: "#4B5563" }}>No data yet</div>
+                    )}
+                    {insights.byPlatform.map((p, i) => (
+                      <div key={i} style={{ marginBottom: 12 }}>
+                        <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 5 }}>
+                          <span style={{ fontSize: 12, color: "#CBD5E1" }}>{p.platform}</span>
+                          <span style={{ fontSize: 12, color: p.rate >= 30 ? "#10B981" : p.rate >= 15 ? "#F59E0B" : "#64748B", fontWeight: 700, fontFamily: "var(--font-geist-mono), monospace" }}>
+                            {p.rate}%
+                          </span>
+                        </div>
+                        <div style={{ height: 4, background: "#1E293B", borderRadius: 2, overflow: "hidden" }}>
+                          <div style={{
+                            height: "100%", borderRadius: 2,
+                            width: `${Math.min(p.rate * 2.5, 100)}%`,
+                            background: p.rate >= 30 ? "linear-gradient(90deg, #10B981, #06B6D4)" : "#3B82F6",
+                          }} />
+                        </div>
+                        <div style={{ fontSize: 10, color: "#4B5563", marginTop: 3 }}>{p.won}W / {p.applied} applied</div>
+                      </div>
+                    ))}
+                  </div>
+
+                  {/* Top skills */}
+                  <div style={{ background: "#0D1117", border: "1px solid #1E293B", borderRadius: 8, padding: "18px 20px" }}>
+                    <div style={{ fontSize: 10, color: "#64748B", letterSpacing: "0.1em", marginBottom: 14 }}>TOP SKILLS IN WINS</div>
+                    {insights.topSkills.length === 0 && (
+                      <div style={{ fontSize: 11, color: "#4B5563" }}>No wins yet</div>
+                    )}
+                    {insights.topSkills.map((s, i) => (
+                      <div key={i} style={{
+                        display: "flex", justifyContent: "space-between", alignItems: "center",
+                        padding: "6px 0", borderBottom: "1px solid #0F172A",
+                      }}>
+                        <span style={{ fontSize: 12, color: "#94A3B8" }}>{s.skill}</span>
+                        <span style={{
+                          background: "rgba(16,185,129,0.1)", color: "#10B981",
+                          fontSize: 10, padding: "2px 8px", borderRadius: 3, fontWeight: 700,
+                        }}>{s.count}×</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+
         {/* ── TEMPLATES TAB ── */}
         {tab === "templates" && (
           <div style={{ flex: 1, overflowY: "auto", padding: 24, display: "flex", gap: 20 }}>
@@ -941,41 +1086,55 @@ export default function DashboardPage() {
               ))}
             </div>
 
-            {/* Win rate by category */}
-            <div style={{ background: "#0D1117", border: "1px solid #1E293B", borderRadius: 8, padding: "20px 24px" }}>
-              <div style={{ fontSize: 11, color: "#64748B", letterSpacing: "0.1em", marginBottom: 20 }}>
-                WIN RATE BY CATEGORY
-              </div>
-              {[
-                { cat: "AI Automation", rate: 36, wins: 8, sent: 22 },
-                { cat: "Security Audit", rate: 33, wins: 3, sent: 9 },
-                { cat: "Bug Fix / Troubleshoot", rate: 32, wins: 6, sent: 19 },
-                { cat: "SaaS Architecture", rate: 29, wins: 4, sent: 14 },
-                { cat: "API Integration", rate: 28, wins: 5, sent: 18 },
-                { cat: "Full Stack Build", rate: 18, wins: 2, sent: 11 },
-              ].map((row, i) => (
-                <div key={i} style={{ display: "flex", alignItems: "center", gap: 16, marginBottom: 14 }}>
-                  <div style={{ width: 160, fontSize: 12, color: "#94A3B8", flexShrink: 0 }}>{row.cat}</div>
-                  <div style={{ flex: 1, height: 6, background: "#1E293B", borderRadius: 3, overflow: "hidden" }}>
-                    <div style={{
-                      height: "100%", borderRadius: 3,
-                      width: `${row.rate * 2.5}%`,
-                      background: row.rate > 30
-                        ? "linear-gradient(90deg, #10B981, #06B6D4)"
-                        : row.rate > 20
-                        ? "linear-gradient(90deg, #3B82F6, #8B5CF6)"
-                        : "#475569",
-                      transition: "width 0.8s ease",
-                    }} />
-                  </div>
-                  <div style={{ width: 44, fontSize: 12, color: SCORE_COLOR(row.rate + 60), fontWeight: 700, textAlign: "right", fontFamily: "var(--font-geist-mono), monospace" }}>
-                    {row.rate}%
-                  </div>
-                  <div style={{ width: 80, fontSize: 10, color: "#4B5563", textAlign: "right", fontFamily: "var(--font-geist-mono), monospace" }}>
-                    {row.wins}W / {row.sent}
-                  </div>
+            {/* Win rate by platform — live data */}
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}>
+              <div style={{ background: "#0D1117", border: "1px solid #1E293B", borderRadius: 8, padding: "20px 24px" }}>
+                <div style={{ fontSize: 11, color: "#64748B", letterSpacing: "0.1em", marginBottom: 20 }}>
+                  WIN RATE BY PLATFORM
                 </div>
-              ))}
+                {(!insights || insights.byPlatform.length === 0) && (
+                  <div style={{ fontSize: 12, color: "#4B5563" }}>No data yet — apply to jobs to build this.</div>
+                )}
+                {(insights?.byPlatform || []).map((row, i) => (
+                  <div key={i} style={{ display: "flex", alignItems: "center", gap: 14, marginBottom: 14 }}>
+                    <div style={{ width: 120, fontSize: 12, color: "#94A3B8", flexShrink: 0 }}>{row.platform}</div>
+                    <div style={{ flex: 1, height: 5, background: "#1E293B", borderRadius: 2, overflow: "hidden" }}>
+                      <div style={{
+                        height: "100%", borderRadius: 2, transition: "width 0.8s ease",
+                        width: `${Math.min(row.rate * 2.5, 100)}%`,
+                        background: row.rate >= 30 ? "linear-gradient(90deg,#10B981,#06B6D4)" : row.rate >= 15 ? "linear-gradient(90deg,#3B82F6,#8B5CF6)" : "#475569",
+                      }} />
+                    </div>
+                    <div style={{ width: 36, fontSize: 12, color: SCORE_COLOR(row.rate + 60), fontWeight: 700, textAlign: "right", fontFamily: "var(--font-geist-mono), monospace" }}>
+                      {row.rate}%
+                    </div>
+                    <div style={{ width: 64, fontSize: 10, color: "#4B5563", textAlign: "right", fontFamily: "var(--font-geist-mono), monospace" }}>
+                      {row.won}W/{row.applied}
+                    </div>
+                  </div>
+                ))}
+              </div>
+
+              <div style={{ background: "#0D1117", border: "1px solid #1E293B", borderRadius: 8, padding: "20px 24px" }}>
+                <div style={{ fontSize: 11, color: "#64748B", letterSpacing: "0.1em", marginBottom: 20 }}>
+                  TOP SKILLS IN WINS
+                </div>
+                {(!insights || insights.topSkills.length === 0) && (
+                  <div style={{ fontSize: 12, color: "#4B5563" }}>No wins logged yet.</div>
+                )}
+                {(insights?.topSkills || []).slice(0, 8).map((s, i) => (
+                  <div key={i} style={{
+                    display: "flex", justifyContent: "space-between", alignItems: "center",
+                    padding: "7px 0", borderBottom: "1px solid #0F172A",
+                  }}>
+                    <span style={{ fontSize: 12, color: "#94A3B8" }}>{s.skill}</span>
+                    <span style={{
+                      background: "rgba(16,185,129,0.1)", color: "#10B981",
+                      fontSize: 10, padding: "2px 8px", borderRadius: 3, fontWeight: 700,
+                    }}>{s.count}×</span>
+                  </div>
+                ))}
+              </div>
             </div>
           </div>
         )}

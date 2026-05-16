@@ -39,14 +39,184 @@ async function cmdHelp(chatId: number) {
     'Proposal flow:',
     '/apply [job_id] — Mark job as applied',
     '/replied [job_id] — Client replied → creates lead',
-    '/won [job_id] [amount] — Won → creates invoice',
+    '/won [job_id] [amount] — Won → creates invoice + AI brief',
     '/lost [job_id] — Mark as lost',
     '',
-    'CRM &amp; Finance:',
-    '/pipeline — Pipeline Kanban summary',
-    '/finance — Invoice &amp; earnings summary',
+    'Invoice ops:',
+    '/invoiced [inv_id] — Mark invoice sent',
+    '/paid [inv_id] — Mark paid → auto-portfolio',
+    '/overdue — List overdue invoices',
+    '',
+    'Intelligence:',
+    '/insights — Win rates, revenue, top skills',
+    '',
+    'CRM:',
+    '/pipeline — Pipeline summary',
+    '/finance — Finance summary',
     '/help — Show this menu',
   ].join('\n'))
+}
+
+async function cmdInvoiced(chatId: number, prefix: string) {
+  if (!prefix) {
+    await send(chatId, '⚠️ Usage: /invoiced [invoice_id]\nGet IDs from /finance')
+    return
+  }
+  try {
+    const invoice = await prisma.invoice.findFirst({
+      where: { OR: [{ id: prefix }, { id: { startsWith: prefix } }] },
+    })
+    if (!invoice) {
+      await send(chatId, `❌ Invoice not found: <code>${prefix}</code>`)
+      return
+    }
+    await prisma.invoice.update({ where: { id: invoice.id }, data: { status: 'sent' } })
+    await send(chatId, [
+      '📤 <b>Invoice Sent</b>',
+      '',
+      `👤 ${invoice.clientName}`,
+      `💰 ${fmtKES(invoice.amount)}`,
+      `📋 ${invoice.description || '—'}`,
+      '',
+      'Use <b>/paid ' + invoice.id.slice(0, 8) + '</b> when they pay.',
+    ].join('\n'))
+  } catch (err) {
+    await send(chatId, `❌ Error: ${err instanceof Error ? err.message : 'unknown'}`)
+  }
+}
+
+async function cmdPaid(chatId: number, prefix: string) {
+  if (!prefix) {
+    await send(chatId, '⚠️ Usage: /paid [invoice_id]')
+    return
+  }
+  try {
+    const invoice = await prisma.invoice.findFirst({
+      where: { OR: [{ id: prefix }, { id: { startsWith: prefix } }] },
+    })
+    if (!invoice) {
+      await send(chatId, `❌ Invoice not found: <code>${prefix}</code>`)
+      return
+    }
+    await prisma.invoice.update({ where: { id: invoice.id }, data: { status: 'paid' } })
+    await logAnalyticsEvent({ wins: 0, revenue: invoice.amount })
+
+    // Auto-create portfolio item
+    const job = invoice.jobId
+      ? await prisma.job.findUnique({ where: { id: invoice.jobId } })
+      : null
+    await prisma.portfolioItem.create({
+      data: {
+        title: job?.title || invoice.description || invoice.clientName,
+        client: invoice.clientName,
+        techStack: job?.skills || '',
+        outcome: job?.projectNotes || '',
+        revenue: invoice.amount,
+        status: 'active',
+        completedAt: new Date(),
+      },
+    })
+
+    await send(chatId, [
+      '💚 <b>Payment Received!</b>',
+      '',
+      `👤 ${invoice.clientName}`,
+      `💰 <b>${fmtKES(invoice.amount)}</b>`,
+      '',
+      '📁 Portfolio item created automatically.',
+      '🎯 Keep going — next win awaits.',
+    ].join('\n'))
+  } catch (err) {
+    await send(chatId, `❌ Error: ${err instanceof Error ? err.message : 'unknown'}`)
+  }
+}
+
+async function cmdOverdue(chatId: number) {
+  try {
+    const sevenDaysAgo = new Date(Date.now() - 7 * 86400000)
+    const invoices = await prisma.invoice.findMany({
+      where: { status: 'sent', createdAt: { lt: sevenDaysAgo } },
+      orderBy: { createdAt: 'asc' },
+    })
+    if (invoices.length === 0) {
+      await send(chatId, '✅ No overdue invoices. All clear!')
+      return
+    }
+    const daysOld = (inv: { createdAt: Date }) =>
+      Math.floor((Date.now() - new Date(inv.createdAt).getTime()) / 86400000)
+
+    const lines = ['🔴 <b>Overdue Invoices</b>', '']
+    invoices.forEach(inv => {
+      lines.push(`📄 <b>${inv.clientName}</b>`)
+      lines.push(`   💰 ${fmtKES(inv.amount)} · ${daysOld(inv)}d overdue`)
+      lines.push(`   ID: <code>${inv.id.slice(0, 8)}</code>`)
+      lines.push('')
+    })
+    lines.push(`Use /paid [id] to mark as paid.`)
+    await send(chatId, lines.join('\n'))
+  } catch (err) {
+    await send(chatId, `❌ Error: ${err instanceof Error ? err.message : 'unknown'}`)
+  }
+}
+
+async function cmdInsights(chatId: number) {
+  try {
+    const jobs = await prisma.job.findMany({
+      select: { status: true, platform: true, skills: true },
+    })
+    const invoices = await prisma.invoice.findMany({
+      select: { status: true, amount: true },
+    })
+
+    const won    = jobs.filter(j => j.status === 'won')
+    const lost   = jobs.filter(j => j.status === 'lost')
+    const applied = jobs.filter(j => ['applied', 'replied', 'won', 'lost'].includes(j.status))
+
+    const totalDecided = won.length + lost.length
+    const winRate = totalDecided > 0 ? Math.round((won.length / totalDecided) * 100) : 0
+    const responseRate = applied.length > 0
+      ? Math.round((jobs.filter(j => ['replied', 'won', 'lost'].includes(j.status)).length / applied.length) * 100)
+      : 0
+
+    const paidInvoices = invoices.filter(i => i.status === 'paid')
+    const totalRevenue = paidInvoices.reduce((s, i) => s + i.amount, 0)
+    const avgDeal = paidInvoices.length > 0 ? Math.round(totalRevenue / paidInvoices.length) : 0
+    const pending = invoices.filter(i => i.status === 'sent').reduce((s, i) => s + i.amount, 0)
+
+    // Best platform
+    const platforms: Record<string, { won: number; applied: number }> = {}
+    applied.forEach(j => {
+      if (!platforms[j.platform]) platforms[j.platform] = { won: 0, applied: 0 }
+      platforms[j.platform].applied++
+      if (j.status === 'won') platforms[j.platform].won++
+    })
+    const bestPlatform = Object.entries(platforms)
+      .map(([p, d]) => ({ p, rate: d.applied > 0 ? d.won / d.applied : 0 }))
+      .sort((a, b) => b.rate - a.rate)[0]
+
+    // Top skill
+    const skillCount: Record<string, number> = {}
+    won.forEach(j => {
+      try { (JSON.parse(j.skills || '[]') as string[]).forEach(s => { skillCount[s] = (skillCount[s] || 0) + 1 }) }
+      catch { /* ignore */ }
+    })
+    const topSkill = Object.entries(skillCount).sort((a, b) => b[1] - a[1])[0]
+
+    await send(chatId, [
+      '📊 <b>Nexara Intelligence</b>',
+      '',
+      `🎯 Win rate: <b>${winRate}%</b> (${won.length}W / ${totalDecided} decided)`,
+      `💬 Response rate: <b>${responseRate}%</b> (${applied.length} applied)`,
+      `💰 Total earned: <b>${fmtKES(totalRevenue)}</b>`,
+      `📈 Avg deal: <b>${fmtKES(avgDeal)}</b>`,
+      `⏳ Pending: <b>${fmtKES(pending)}</b>`,
+      '',
+      bestPlatform ? `🏆 Best platform: <b>${bestPlatform.p}</b> (${Math.round(bestPlatform.rate * 100)}% win rate)` : '',
+      topSkill ? `🔑 Top skill: <b>${topSkill[0]}</b> (${topSkill[1]} wins)` : '',
+    ].filter(Boolean).join('\n'))
+  } catch (err) {
+    await send(chatId, `❌ Error: ${err instanceof Error ? err.message : 'unknown'}`)
+  }
 }
 
 async function cmdApply(chatId: number, jobId: string) {
@@ -355,10 +525,14 @@ async function handleUpdate(update: {
     case '/pipeline':return cmdPipeline(msg.chat.id)
     case '/finance': return cmdFinance(msg.chat.id)
     case '/hunt':    return cmdHunt(msg.chat.id)
-    case '/apply':   return cmdApply(msg.chat.id, arg1)
-    case '/replied': return cmdReplied(msg.chat.id, arg1)
-    case '/won':     return cmdWon(msg.chat.id, arg1, arg2)
-    case '/lost':    return cmdLost(msg.chat.id, arg1)
+    case '/apply':    return cmdApply(msg.chat.id, arg1)
+    case '/replied':  return cmdReplied(msg.chat.id, arg1)
+    case '/won':      return cmdWon(msg.chat.id, arg1, arg2)
+    case '/lost':     return cmdLost(msg.chat.id, arg1)
+    case '/invoiced': return cmdInvoiced(msg.chat.id, arg1)
+    case '/paid':     return cmdPaid(msg.chat.id, arg1)
+    case '/overdue':  return cmdOverdue(msg.chat.id)
+    case '/insights': return cmdInsights(msg.chat.id)
     default:
       await send(msg.chat.id, `Unknown command. Send /help to see what I can do.`)
   }

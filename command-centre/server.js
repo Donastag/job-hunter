@@ -11,6 +11,7 @@ app.use(express.urlencoded({ extended: true }))
 
 app.use('/', require('./routes/hunt'))
 app.use('/pipeline', require('./routes/pipeline'))
+app.use('/projects', require('./routes/projects'))
 app.use('/finance', require('./routes/finance'))
 app.use('/clients', require('./routes/clients'))
 app.use('/knowledge', require('./routes/knowledge'))

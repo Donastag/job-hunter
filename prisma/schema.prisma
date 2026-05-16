@@ -83,6 +83,8 @@ model Job {
   fetchedAt      DateTime  @default(now())
   brief          String?
   loom           Boolean   @default(false)
+  projectNotes   String?
+  templateUsed   String?
   userId         String?
   user           User?     @relation(fields: [userId], references: [id])
   createdAt      DateTime  @default(now())
@@ -149,6 +151,7 @@ model Invoice {
   amount      Float    @default(0)
   status      String   @default("draft")
   dueDate     DateTime?
+  jobId       String?
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 

@@ -239,6 +239,9 @@ async function cmdApply(chatId: number, jobId: string) {
     }
     await prisma.job.update({ where: { id: job.id }, data: { status: 'applied' } })
     await logAnalyticsEvent('proposals')
+    if (job.templateUsed) {
+      await prisma.template.updateMany({ where: { name: job.templateUsed }, data: { sent: { increment: 1 } } })
+    }
     await send(chatId, [
       '✅ <b>Marked as Applied</b>',
       '',
@@ -326,6 +329,9 @@ async function cmdWon(chatId: number, jobId: string, amountStr: string) {
     const amount = amountStr ? parseFloat(amountStr) : 0
     await prisma.job.update({ where: { id: job.id }, data: { status: 'won' } })
     await logAnalyticsEvent({ wins: 1, revenue: amount })
+    if (job.templateUsed) {
+      await prisma.template.updateMany({ where: { name: job.templateUsed }, data: { wins: { increment: 1 } } })
+    }
     const invoice = await prisma.invoice.create({
       data: {
         clientName: job.clientName || job.title,

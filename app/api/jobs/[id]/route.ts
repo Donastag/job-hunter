@@ -29,6 +29,10 @@ export async function PATCH(
 
     if (status === 'applied') {
       await logAnalyticsEvent('proposals')
+      const tplName = templateUsed ?? job.templateUsed
+      if (tplName) {
+        await prisma.template.updateMany({ where: { name: tplName }, data: { sent: { increment: 1 } } })
+      }
     }
 
     if (status === 'replied') {
@@ -52,6 +56,10 @@ export async function PATCH(
     if (status === 'won') {
       const val = amount ? Number(amount) : 0
       await logAnalyticsEvent({ wins: 1, revenue: val })
+      const tplName = templateUsed ?? job.templateUsed
+      if (tplName) {
+        await prisma.template.updateMany({ where: { name: tplName }, data: { wins: { increment: 1 } } })
+      }
 
       // Generate AI project brief (non-blocking)
       generateProjectBrief(job).then(brief => {
